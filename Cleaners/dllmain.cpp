@@ -16,7 +16,7 @@
 #pragma comment(lib, "openjtalk\\pyopenjtalk-master\\lib\\hts_engine_API\\hts_engine_API.lib")
 #pragma comment(lib, "openjtalk\\pyopenjtalk-master\\lib\\hts_engine_API\\hts_engine.lib")
 #include <codecvt>
-#include <list>
+#include <vector>
 #include <string>
 #include <regex>
 
@@ -32,35 +32,6 @@ std::wstring to_wide_string(const std::string& input)
     return converter.from_bytes(input);
 }
 
-node2feature::node2feature(NJDNode* node)
-{
-    str = NJDNode_get_string(node);
-    pos = NJDNode_get_pos(node);
-    pos_group1 = NJDNode_get_pos_group1(node);
-    pos_group2 = NJDNode_get_pos_group2(node);
-    pos_group3 = NJDNode_get_pos_group3(node);
-    ctype = NJDNode_get_ctype(node);
-    cform = NJDNode_get_cform(node);
-    orig = NJDNode_get_orig(node);
-    read = NJDNode_get_read(node);
-    pron = NJDNode_get_pron(node);
-    acc = NJDNode_get_acc(node);
-    mora_size = NJDNode_get_mora_size(node);
-    chain_rule = NJDNode_get_chain_rule(node);
-    chain_flag = NJDNode_get_chain_flag(node);
-}
-std::list<node2feature> njd2feature(const NJD* njd)
-{
-	NJDNode* node = njd->head;
-    std::list<node2feature> features;
-    while (node != nullptr)
-    {
-    	features.emplace_back(node2feature(node));
-    	node = node->next;
-    }
-    return features;
-}
-
 openjtalk::openjtalk()
 {
     mecab = new Mecab;
@@ -72,12 +43,11 @@ openjtalk::openjtalk()
     Mecab_load(mecab, "cleaners\\");
 }
 
-std::list<node2feature> openjtalk::run_frontend(const char* input)
+void openjtalk::run_frontend(const char* input) const
 {
-    const auto Lens = strlen(input);
-    data = new char[Lens * 3];
-    text2mecab(data, input);
-    Mecab_analysis(mecab,data);
+    char buff[8192];
+    text2mecab(buff, input);
+    Mecab_analysis(mecab, buff);
     mecab2njd(njd, Mecab_get_feature(mecab), Mecab_get_size(mecab));
     njd_set_pronunciation(njd);
     njd_set_digit(njd);
@@ -85,51 +55,22 @@ std::list<node2feature> openjtalk::run_frontend(const char* input)
     njd_set_accent_type(njd);
     njd_set_unvoiced_vowel(njd);
     njd_set_long_vowel(njd);
-    auto features = njd2feature(njd);
+    //auto features = njd2feature(njd);
 
-    NJD_refresh(njd);
+    //NJD_refresh(njd);
     Mecab_refresh(mecab);
-    return features;
-}
-
-std::vector<char*> make_label(const openjtalk& ojt, const std::list<node2feature>& njd_features)
-{
-    return ojt.make_label(njd_features);
+    //return features;
 }
 
 std::vector<char*> extract_fullcontext(openjtalk& ojt, const char* text, bool run_marine = false)
 {
-    const auto njd_features = ojt.run_frontend(text);
-    return make_label(ojt,njd_features);
+    ojt.run_frontend(text);
+    return ojt.make_label();
 }
 
-void feature2njd(NJD* njd, const std::list<node2feature>& njd_features)
+std::vector<char*> openjtalk::make_label() const
 {
-    for (auto& feature_node : njd_features)
-    {
-        const auto node = (NJDNode*)malloc(sizeof(NJDNode));
-        NJDNode_initialize(node);
-        NJDNode_set_string(node, feature_node.str);
-        NJDNode_set_pos(node, feature_node.pos);
-        NJDNode_set_pos_group1(node, feature_node.pos_group1);
-        NJDNode_set_pos_group2(node, feature_node.pos_group2);
-        NJDNode_set_pos_group3(node, feature_node.pos_group3);
-        NJDNode_set_ctype(node, feature_node.ctype);
-        NJDNode_set_cform(node, feature_node.cform);
-        NJDNode_set_orig(node, feature_node.orig);
-        NJDNode_set_read(node, feature_node.read);
-        NJDNode_set_pron(node, feature_node.pron);
-        NJDNode_set_acc(node, feature_node.acc);
-        NJDNode_set_mora_size(node, feature_node.mora_size);
-        NJDNode_set_chain_rule(node, feature_node.chain_rule);
-        NJDNode_set_chain_flag(node, feature_node.chain_flag);
-        NJD_push_node(njd, node);
-    }
-}
-
-std::vector<char*> openjtalk::make_label(const std::list<node2feature>& njd_features) const
-{
-    feature2njd(njd, njd_features);
+    //feature2njd(njd, njd_features);
     njd2jpcommon(jpcommon, njd);
     JPCommon_make_label(jpcommon);
     const int label_size = JPCommon_get_label_size(jpcommon);
@@ -157,7 +98,7 @@ const wchar_t* JapaneseCleaner(const wchar_t* input)
     std::vector<std::wstring> marks;
     const std::wstring wstr(input);
     const std::wregex _characters(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]");
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]");
+    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
     const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
     std::regex ph("\\-([^\\+]*)\\+");
     std::regex nm("/F:(\\d+)_");
@@ -210,9 +151,9 @@ const wchar_t* JapaneseCleaner(const wchar_t* input)
             if (a3 == 1 && a2_next == 1)
                 text += ' ';
             else if (a1 == 0 && a2_next == a2 + 1 && a2 != n_moras)
-                text += "L";
+                text += "#";
             else if (a3 == 1 && a2_next == 1)
-                text += "H";
+                text += "`";
         }
         if (i < marks.size())
         {
