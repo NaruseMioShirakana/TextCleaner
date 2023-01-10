@@ -12,10 +12,15 @@ inline std::wstring* globalStr;
 ccdllexport const wchar_t* JapaneseCleaner(const wchar_t* input);
 ccdllexport void Release();
 
+ccdllexport void CreateOjt(const char* folder);
+ccdllexport const char* extractFullContext(const char* text);
+ccdllexport void ReleaseOjt();
+
 class openjtalk
 {
 public:
     openjtalk();
+    openjtalk(const char*);
     ~openjtalk()
     {
         Mecab_clear(mecab);

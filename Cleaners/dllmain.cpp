@@ -43,6 +43,17 @@ openjtalk::openjtalk()
     Mecab_load(mecab, "cleaners\\");
 }
 
+openjtalk::openjtalk(const char* folder)
+{
+    mecab = new Mecab;
+    njd = new NJD;
+    jpcommon = new JPCommon;
+    JPCommon_initialize(jpcommon);
+    Mecab_initialize(mecab);
+    NJD_initialize(njd);
+    Mecab_load(mecab, folder);
+}
+
 void openjtalk::run_frontend(const char* input) const
 {
     char buff[8192];
@@ -168,6 +179,32 @@ const wchar_t* JapaneseCleaner(const wchar_t* input)
 void Release()
 {
     delete globalStr;
+}
+
+openjtalk* ojtins = nullptr;
+
+const char* extractFullContext(const char* text)
+{
+    std::string outtext;
+    const auto out = extract_fullcontext(*ojtins, text);
+    for (const auto& ph : out)
+    {
+	    outtext += ph;
+        outtext += "<<eol>>";
+    }
+    return outtext.c_str();
+}
+
+void CreateOjt(const char* folder)
+{
+    if (!ojtins)
+        ojtins = new openjtalk(folder);
+}
+
+void ReleaseOjt()
+{
+    delete ojtins;
+    ojtins = nullptr;
 }
 
 BOOL APIENTRY DllMain( HMODULE hModule,
