@@ -1,44 +1,78 @@
 ﻿#pragma once
-#include <list>
 #include <string>
 #include <vector>
-
 #include "openjtalk/open_jtalk-1.11/src/mecab/src/mecab.h"
 #include "openjtalk/open_jtalk-1.11/src/njd/njd.h"
-#include "openjtalk\\open_jtalk-1.11\\src\\jpcommon\\jpcommon.h"
+#include "openjtalk/open_jtalk-1.11/src/jpcommon/jpcommon.h"
 #define ccdllexport extern "C" __declspec(dllexport)
-inline std::wstring* globalStr;
+inline std::wstring* globalStrW = nullptr;
+inline std::string* globalStr = nullptr;
+inline std::string Folder;
 
-ccdllexport const wchar_t* JapaneseCleaner(const wchar_t* input);
+struct NjdFeature
+{
+    const char* str;
+    const char* pos;
+    const char* pos_group1;
+    const char* pos_group2;
+    const char* pos_group3;
+    const char* ctype;
+    const char* cform;
+    const char* orig;
+    const char* read;
+    const char* pron;
+    int acc;
+    int mora_size;
+    const char* chain_rule;
+    int chain_flag;
+    NjdFeature(NJDNode* node);
+};
+
+ccdllexport const wchar_t* PluginMain(const wchar_t*);
+
+ccdllexport void CreateOjt(const char*);
+
+ccdllexport const char* extractFullContext(const char*);
+
+ccdllexport const char* getKana(const char*);
+
+ccdllexport const char* getPhoneme(const char*);
+
+ccdllexport const char* getRomaji(const char*);
+
+ccdllexport const char* getIpa1(const char*);
+
+ccdllexport const char* getIpa2(const char*);
+
+ccdllexport const char* getPhonemeWithBlank(const char*);
+
+ccdllexport const char* getRomajiWithBlank(const char*);
+
+ccdllexport const char* getIpa1WithBlank(const char*);
+
+ccdllexport const char* getIpa2WithBlank(const char*);
+
 ccdllexport void Release();
-
-ccdllexport void CreateOjt(const char* folder);
-ccdllexport const char* extractFullContext(const char* text);
-ccdllexport void ReleaseOjt();
 
 class openjtalk
 {
 public:
     openjtalk();
     openjtalk(const char*);
-    ~openjtalk()
-    {
-        Mecab_clear(mecab);
-        NJD_clear(njd);
-        JPCommon_clear(jpcommon);
-        delete mecab;
-        delete njd;
-        delete jpcommon;
-        jpcommon = nullptr;
-        mecab = nullptr;
-        njd = nullptr;
-    }
+    ~openjtalk();
     void run_frontend(const char*) const;
     openjtalk(const openjtalk&) = delete;
     openjtalk(openjtalk&&) = delete;
     openjtalk operator=(const openjtalk&) = delete;
     openjtalk operator = (openjtalk&&) = delete;
-    std::vector<char*> make_label() const;
+    [[nodiscard]] std::vector<std::wstring> make_label() const;
+    [[nodiscard]] std::vector<NjdFeature> getfeature() const;
+    void refresh() const
+    {
+        NJD_refresh(njd);
+        Mecab_refresh(mecab);
+        JPCommon_refresh(jpcommon);
+    }
 private:
     Mecab* mecab = nullptr;
     NJD* njd = nullptr;
