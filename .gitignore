@@ -1,0 +1,6 @@
+x64/
+Cleaners/x64
+/Cleaners/rapidjson
+/Cleaners/openjtalk
+/Cleaners/include
+/.vs/Cleaners
