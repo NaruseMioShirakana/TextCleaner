@@ -18,14 +18,14 @@
 #pragma comment(lib, "openjtalk\\pyopenjtalk-master\\lib\\hts_engine_API\\hts_engine_API.lib")
 #pragma comment(lib, "openjtalk\\pyopenjtalk-master\\lib\\hts_engine_API\\hts_engine.lib")
 
-const std::wregex _characters(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]");
-const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-const std::wregex ph(L"\\-([^\\+]*)\\+");
-const std::wregex nm(L"/F:(\\d+)_");
-const std::wregex a11(L"/A:(\\-?[0-9]+)\\+");
-const std::wregex a22(L"\\+(\\d+)\\+");
-const std::wregex a33(L"\\+(\\d+)/");
+enum class CleanerType
+{
+	Cleaner1,
+    Cleaner2,
+    Ipa1,
+    Ipa2,
+    Ipa3
+};
 
 //inline std::wstring* globalStrW = nullptr;
 
@@ -80,51 +80,9 @@ openjtalk::~openjtalk()
     njd = nullptr;
 }
 
-NjdFeature::NjdFeature(NJDNode* node)
-{
-    str = NJDNode_get_string(node);
-    pos = NJDNode_get_pos(node);
-    pos_group1 = NJDNode_get_pos_group1(node);
-    pos_group2 = NJDNode_get_pos_group2(node);
-    pos_group3 = NJDNode_get_pos_group3(node);
-    ctype = NJDNode_get_ctype(node);
-    cform = NJDNode_get_cform(node);
-    orig = NJDNode_get_orig(node);
-    read = NJDNode_get_read(node);
-    pron = NJDNode_get_pron(node);
-    acc = NJDNode_get_acc(node);
-    mora_size = NJDNode_get_mora_size(node);
-    chain_rule = NJDNode_get_chain_rule(node);
-    chain_flag = NJDNode_get_chain_flag(node);
-}
-
-std::vector<NjdFeature> njd2feature(const NJD* njd)
-{
-    NJDNode* node = njd->head;
-    std::vector<NjdFeature> features;
-    while (node != nullptr)
-    {
-        features.emplace_back(NjdFeature(node));
-        node = node->next;
-    }
-    return features;
-}
-
-std::vector<NjdFeature> openjtalk::getfeature() const
-{
-    NJDNode* node = njd->head;
-    std::vector<NjdFeature> features;
-    while (node != nullptr)
-    {
-        features.emplace_back(NjdFeature(node));
-        node = node->next;
-    }
-    return features;
-}
-
 void openjtalk::run_frontend(const char* input) const
 {
-    std::vector<char> buff(strlen(input) * 4);
+    std::vector<char> buff(1024ull * 1024);
     text2mecab(buff.data(), input);
     Mecab_analysis(mecab, buff.data());
     mecab2njd(njd, Mecab_get_feature(mecab), Mecab_get_size(mecab));
@@ -163,6 +121,22 @@ std::vector<std::wstring> openjtalk::make_label() const
     return labels;
 }
 
+void getRealSokuon(std::wstring& tmpStr)
+{
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"Q([↑↓]*[kg])"), L"k#$1");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"Q([↑↓]*[tdjʧ])"), L"t#$1");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"Q([↑↓]*[sʃ])"), L"s$1");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"Q([↑↓]*[pb])"), L"p#$1");
+}
+
+void getRealHatsuon(std::wstring& tmpStr)
+{
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"N([↑↓]*[pbm])"), L"m$1");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"N([↑↓]*[ʧʥj])"), L"n^$1");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"N([↑↓]*[tdn])"), L"n$1");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"N([↑↓]*[kg])"), L"ŋ$1");
+}
+
 void getIpaStr1(std::wstring& tmpStr)
 {
     tmpStr = std::regex_replace(tmpStr, std::wregex(L"ts"), L"ʦ");
@@ -195,12 +169,29 @@ void getIpaStr2(std::wstring& tmpStr)
     tmpStr = std::regex_replace(tmpStr, std::wregex(L"r"), L"ɾ");
 }
 
-void divide(const std::wstring& s, std::vector<std::wstring>& v, const std::wregex& reg)
+void getIpaStr3(std::wstring& tmpStr)
+{
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"n^"), L"ȵ");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"ʃ"), L"ɕ");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"#"), L"̚");
+    //tmpStr = std::regex_replace(tmpStr, std::wregex(L"((?:^|\\s)(?:ts|tɕ|[kpt])"), L"$1ʰ");
+}
+
+void replaceSymbol(std::wstring& tmpStr)
+{
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"。"), L".");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"、"), L",");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"？"), L"?");
+    tmpStr = std::regex_replace(tmpStr, std::wregex(L"！"), L"!");
+}
+
+void divide(std::wstring s, std::vector<std::wstring>& v, const std::wregex& reg)
 {
     std::wsmatch mResult;
-    if (regex_search(s, mResult, reg)) {
-        v.emplace_back(std::wstring(mResult[0].first, mResult[0].second));
-        divide(std::wstring(mResult[0].second, s.end()), v, reg);
+    while (regex_search(s, mResult, reg))
+    {
+        v.emplace_back(mResult[0].str());
+        s = mResult.suffix();
     }
 }
 
@@ -210,19 +201,73 @@ void CreateOjt(const wchar_t* folder)
         ojtins = new openjtalk(to_byte_string(folder).c_str());
 }
 
+CleanerType CheckType(std::wstring& input)
+{
+    size_t ret = input.find(L"[Japanese1]");
+    if (ret != std::wstring::npos)
+    {
+        input = input.substr(11);
+        return CleanerType::Cleaner1;
+    }
+    ret = input.find(L"[Japanese2]");
+    if (ret != std::wstring::npos)
+    {
+        input = input.substr(11);
+        return CleanerType::Cleaner2;
+    }
+    ret = input.find(L"[Ipa1]");
+    if (ret != std::wstring::npos)
+    {
+        input = input.substr(6);
+        return CleanerType::Ipa1;
+    }
+    ret = input.find(L"[Ipa2]");
+    if (ret != std::wstring::npos)
+    {
+        input = input.substr(6);
+        return CleanerType::Ipa2;
+    }
+    ret = input.find(L"[Ipa3]");
+    if (ret != std::wstring::npos)
+    {
+        input = input.substr(6);
+        return CleanerType::Ipa3;
+    }
+    return CleanerType::Cleaner2;
+}
+
 void Release()
+{
+    return;
+}
+
+void ReleaseOjt()
 {
     delete ojtins;
     ojtins = nullptr;
 }
 
-void JapaneseCleaner(const std::wstring& input)
+void JapaneseCleaner(std::wstring& input)
 {
     if (!ojtins)
         ojtins = new openjtalk();
-    _CleanedData.get().clear();
+
+    const std::wregex _characters(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]");
+    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
+    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
+    const std::wregex ph(L"\\-([^\\+]*)\\+");
+    const std::wregex nm(L"/F:(\\d+)_");
+    const std::wregex a11(L"/A:(\\-?[0-9]+)\\+");
+    const std::wregex a22(L"\\+(\\d+)\\+");
+    const std::wregex a33(L"\\+(\\d+)/");
 
     auto& CleanedString = _CleanedData.get();
+    CleanedString.clear();
+
+    const CleanerType Ctype = CheckType(input);
+
+    if (!std::regex_search(input, _marks))
+        input += L'。';
     std::vector<std::wstring> sentences;
     std::vector<std::wstring> marks;
     divide(input, sentences, _sentence);
@@ -250,7 +295,8 @@ void JapaneseCleaner(const std::wstring& input)
                 phoneme = std::regex_replace(phoneme, std::wregex(L"ch"), L"ʧ");
                 phoneme = std::regex_replace(phoneme, std::wregex(L"sh"), L"ʃ");
                 phoneme = std::regex_replace(phoneme, std::wregex(L"cl"), L"Q");
-                phoneme = std::regex_replace(phoneme, std::wregex(L"ts"), L"ʦ");
+                if (Ctype == CleanerType::Cleaner2)
+                    phoneme = std::regex_replace(phoneme, std::wregex(L"ts"), L"ʦ");
                 CleanedString += phoneme;
             }
             std::regex_search(labels[it], mResult, nm);
@@ -282,11 +328,41 @@ void JapaneseCleaner(const std::wstring& input)
             CleanedString += std::regex_replace(marks[SymbolIndex], std::wregex(L""), L"");
         ++SymbolIndex;
     }
+    if (Ctype != CleanerType::Cleaner1 && Ctype != CleanerType::Cleaner2)
+    {
+        getRealSokuon(CleanedString);
+        getRealHatsuon(CleanedString);
+    }
+    switch(Ctype)
+    {
+    case CleanerType::Ipa1:
+    {
+        getIpaStr1(CleanedString);
+        break;
+    }
+    case CleanerType::Ipa2:
+    {
+        getIpaStr2(CleanedString);
+        break;
+    }
+    case CleanerType::Ipa3:
+    {
+        getIpaStr2(CleanedString);
+        getIpaStr3(CleanedString);
+        break;
+    }
+    default:
+    {
+        break;
+    }
+    }
+    replaceSymbol(CleanedString);
 }
 
 const wchar_t* PluginMain(const wchar_t* input)
 {
-    JapaneseCleaner(input);
+    std::wstring _inp = input;
+    JapaneseCleaner(_inp);
     return _CleanedData.get().c_str();
 }
 
@@ -1149,11 +1225,11 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     }
     case DLL_THREAD_DETACH:
     {
-        _CleanedData.refresh();
+        //_CleanedData.refresh();
         break;
     }
     case DLL_PROCESS_DETACH:
-        Release();
+        ReleaseOjt();
         break;
     }
     return TRUE;
