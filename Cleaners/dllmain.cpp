@@ -1,125 +1,512 @@
-﻿#include "framework.h"
+﻿#include <string>
+#include <thread>
+#include <vector>
+#include <unordered_map>
+#include "openjtalk/open_jtalk-1.11/src/mecab/src/mecab.h"
+#include "openjtalk/open_jtalk-1.11/src/njd/njd.h"
+#include "openjtalk/open_jtalk-1.11/src/jpcommon/jpcommon.h"
+#include "framework.h"
 #include "openjtalk\\open_jtalk-1.11\\src\\text2mecab\\text2mecab.h"
-#include "openjtalk\\open_jtalk-1.11\\src\\mecab\\src\\mecab.h"
 #include "openjtalk\\open_jtalk-1.11\\src\\mecab2njd\\mecab2njd.h"
-#include "openjtalk\\open_jtalk-1.11\\src\\njd\\njd.h"
 #include "openjtalk\\open_jtalk-1.11\\src\\njd_set_digit\\njd_set_digit.h"
 #include "openjtalk\\open_jtalk-1.11\\src\\njd_set_pronunciation\\njd_set_pronunciation.h"
 #include "openjtalk\\open_jtalk-1.11\\src\\njd_set_accent_phrase\\njd_set_accent_phrase.h"
 #include "openjtalk\\open_jtalk-1.11\\src\\njd_set_accent_type\\njd_set_accent_type.h"
 #include "openjtalk\\open_jtalk-1.11\\src\\njd_set_unvoiced_vowel\\njd_set_unvoiced_vowel.h"
 #include "openjtalk\\open_jtalk-1.11\\src\\njd_set_long_vowel\\njd_set_long_vowel.h"
-#include "openjtalk\\open_jtalk-1.11\\src\\jpcommon\\jpcommon.h"
 #include "openjtalk\\open_jtalk-1.11\\src\\njd2jpcommon\\njd2jpcommon.h"
 #include <codecvt>
 #include <regex>
 #include <atomic>
-#pragma comment(lib, "openjtalk\\pyopenjtalk-master\\lib\\open_jtalk\\openjtalk.lib")
-#pragma comment(lib, "openjtalk\\pyopenjtalk-master\\lib\\hts_engine_API\\hts_engine_API.lib")
-#pragma comment(lib, "openjtalk\\pyopenjtalk-master\\lib\\hts_engine_API\\hts_engine.lib")
+#include "MJson/MJson.h"
+#pragma comment(lib, "openjtalk\\openjtalk.lib")
+#pragma comment(lib, "openjtalk\\hts_engine_API.lib")
+#pragma comment(lib, "openjtalk\\hts_engine.lib")
 
-enum class CleanerType
+std::wstring ChineseNumber[] = { L"零",L"一",L"二",L"三",L"四",L"五",L"六",L"七",L"八",L"九",L"十" };
+std::wstring ChineseNumberDigit[] = { L"",L"十",L"百",L"千",L"万",L"十万",L"百万",L"千万",L"亿" };
+std::vector<std::pair<std::wstring, std::wstring>> _CURRENCY_MAP{{L"\\$", L"ドル"}, { L"¥", L"円" }, { L"£", L"ポンド" }, { L"€", L"ユーロ" }};
+std::wregex NumberRegex(L"\\d+(?:\\.?\\d+)?");
+std::wregex SignRegex(L"[!@#$%^&*()_+\\-=`~,./;'\\[\\]<>?:\"{}|\\\\。？！，、；：“”‘’『』「」（）〔〕【】─…·—～《》〈〉　]+");
+std::wregex SignRegexSingle(L"[!@#$%^&*()_+\\-=`~,./;'\\[\\]<>?:\"{}|\\\\。？！，、；：“”‘’『』「」（）〔〕【】─…·—～《》〈〉　]");
+
+#define _Impl_To_Int(Value) (_wtoi((Value).c_str()))
+
+static const std::vector<std::pair<std::wregex, std::wstring>> _DefaultJapaneseReplaceRegexDict{
+    {std::wregex(LR"(\r)"), L""}, {std::wregex(LR"(\n)"), L""}, {std::wregex(L" "), L"　"},
+    {std::wregex(L"!"), L"！"}, {std::wregex(L"\""), L"”"}, {std::wregex(L"#"), L"＃"},
+    {std::wregex(L"\\$"), L"＄"}, {std::wregex(L"%"), L"％"}, {std::wregex(L"&"), L"＆"},
+    {std::wregex(L"'"), L"’"}, {std::wregex(L"\\("), L"（"}, {std::wregex(L"\\)"), L"）"},
+    {std::wregex(L"\\*"), L"＊"}, {std::wregex(L"\\+"), L"＋"}, {std::wregex(L","), L"，"},
+    {std::wregex(L"\\-"), L"−"}, {std::wregex(L"\\."), L"．"}, {std::wregex(L"\\/"), L"／"},
+    {std::wregex(L"0"), L"０"}, {std::wregex(L"1"), L"１"}, {std::wregex(L"2"), L"２"},
+    {std::wregex(L"3"), L"３"}, {std::wregex(L"4"), L"４"}, {std::wregex(L"5"), L"５"},
+    {std::wregex(L"6"), L"６"}, {std::wregex(L"7"), L"７"}, {std::wregex(L"8"), L"８"},
+    {std::wregex(L"9"), L"９"}, {std::wregex(L":"), L"："}, {std::wregex(L";"), L"；"},
+    {std::wregex(L"<"), L"＜"}, {std::wregex(L"="), L"＝"}, {std::wregex(L">"), L"＞"},
+    {std::wregex(L"\\?"), L"？"}, {std::wregex(L"@"), L"＠"}, {std::wregex(L"A"), L"Ａ"},
+    {std::wregex(L"B"), L"Ｂ"}, {std::wregex(L"C"), L"Ｃ"}, {std::wregex(L"D"), L"Ｄ"},
+    {std::wregex(L"E"), L"Ｅ"}, {std::wregex(L"F"), L"Ｆ"}, {std::wregex(L"G"), L"Ｇ"},
+    {std::wregex(L"H"), L"Ｈ"}, {std::wregex(L"I"), L"Ｉ"}, {std::wregex(L"J"), L"Ｊ"},
+    {std::wregex(L"K"), L"Ｋ"}, {std::wregex(L"L"), L"Ｌ"}, {std::wregex(L"M"), L"Ｍ"},
+    {std::wregex(L"N"), L"Ｎ"}, {std::wregex(L"O"), L"Ｏ"}, {std::wregex(L"P"), L"Ｐ"},
+    {std::wregex(L"Q"), L"Ｑ"}, {std::wregex(L"R"), L"Ｒ"}, {std::wregex(L"S"), L"Ｓ"},
+    {std::wregex(L"T"), L"Ｔ"}, {std::wregex(L"U"), L"Ｕ"}, {std::wregex(L"V"), L"Ｖ"},
+    {std::wregex(L"W"), L"Ｗ"}, {std::wregex(L"X"), L"Ｘ"}, {std::wregex(L"Y"), L"Ｙ"},
+    {std::wregex(L"Z"), L"Ｚ"}, {std::wregex(L"\\["), L"［"}, {std::wregex(L"\\\\"), L"￥"},
+    {std::wregex(L"\\]"), L"］"}, {std::wregex(L"\\^"), L"＾"}, {std::wregex(L"_"), L"＿"},
+    {std::wregex(L"`"), L"‘"}, {std::wregex(L"a"), L"ａ"}, {std::wregex(L"b"), L"ｂ"},
+    {std::wregex(L"c"), L"ｃ"}, {std::wregex(L"d"), L"ｄ"}, {std::wregex(L"e"), L"ｅ"},
+    {std::wregex(L"f"), L"ｆ"}, {std::wregex(L"g"), L"ｇ"}, {std::wregex(L"h"), L"ｈ"},
+    {std::wregex(L"i"), L"ｉ"}, {std::wregex(L"j"), L"ｊ"}, {std::wregex(L"k"), L"ｋ"},
+    {std::wregex(L"l"), L"ｌ"}, {std::wregex(L"m"), L"ｍ"}, {std::wregex(L"n"), L"ｎ"},
+    {std::wregex(L"o"), L"ｏ"}, {std::wregex(L"p"), L"ｐ"}, {std::wregex(L"q"), L"ｑ"},
+    {std::wregex(L"r"), L"ｒ"}, {std::wregex(L"s"), L"ｓ"}, {std::wregex(L"t"), L"ｔ"},
+    {std::wregex(L"u"), L"ｕ"}, {std::wregex(L"v"), L"ｖ"}, {std::wregex(L"w"), L"ｗ"},
+    {std::wregex(L"x"), L"ｘ"}, {std::wregex(L"y"), L"ｙ"}, {std::wregex(L"z"), L"ｚ"},
+    {std::wregex(L"\\{"), L"｛"}, {std::wregex(L"\\|"), L"｜"}, {std::wregex(L"\\}"), L"｝"},
+    {std::wregex(L"~"), L"〜"}, {std::wregex(L"�"), L"？"}
+};
+static const std::wregex _PhonemeInfoRegex{ LR"((.*?)\^(.*?)\-(.*?)\+(.*?)=(.*?)/A:)" };
+static const std::wregex _AInfoGroupRegex{ LR"(/A:(.*?)\+(.*?)\+(.*?)/B:)" };
+static const std::wregex _BInfoGroupRegex{ LR"(/B:(.*?)\-(.*?)_(.*?)/C:)" };
+static const std::wregex _CInfoGroupRegex{ LR"(/C:(.*?)_(.*?)\+(.*?)/D:)" };
+static const std::wregex _DInfoGroupRegex{ LR"(/D:(.*?)\+(.*?)_(.*?)/E:)" };
+static const std::wregex _EInfoGroupRegex{ LR"(/E:(.*?)_(.*?)\!(.*?)_(.*?)\-(.*?)/F:)" };
+static const std::wregex _FInfoGroupRegex{ LR"(/F:(.*?)_(.*?)#(.*?)_(.*?)@(.*?)_(.*?)\|(.*?)_(.*?)/G:)" };
+static const std::wregex _GInfoGroupRegex{ LR"(/G:(.*?)_(.*?)%(.*?)_(.*?)_(.*?)/H:)" };
+static const std::wregex _HInfoGroupRegex{ LR"(/H:(.*?)_(.*?)/I:)" };
+static const std::wregex _IInfoGroupRegex{ LR"(/I:(.*?)\-(.*?)@(.*?)\+(.*?)&(.*?)\-(.*?)\|(.*?)\+(.*?)/J:)" };
+static const std::wregex _JInfoGroupRegex{ LR"(/J:(.*?)_(.*?)/K:)" };
+static const std::wregex _KInfoGroupRegex{ LR"(/K:(.*?)\+(.*?)\-(.*?))" };
+
+struct PhonemeAndTone
 {
-	Cleaner1,
-    Cleaner2,
-    Ipa1,
-    Ipa2,
-    Ipa3
+	wchar_t Phoneme[8];
+	int64_t Tone;
 };
 
-//inline std::wstring* globalStrW = nullptr;
+std::vector<std::wstring> SplitString(
+    const std::wstring& _Input, 
+    const std::wregex& _Regex, 
+    const std::initializer_list<int>& _Sub = { -1 }
+)
+{
+	std::vector<std::wstring> RtnVec;
+	std::wsregex_token_iterator Iter(_Input.begin(), _Input.end(), _Regex, _Sub);
+	std::wsregex_token_iterator End;
+	for (; Iter != End; ++Iter)
+		RtnVec.emplace_back(Iter->str());
+	return RtnVec;
+}
 
-ThreadBoundData _CleanedData;
+std::wstring NumberToChinese(double Number)
+{
+    std::wstring StrRtn;
+    std::wstring InputStr = std::to_wstring(Number);
+    const size_t PIndex = InputStr.find(L'.');
+    std::wstring IntegerStr, FractionStr;
+    if (PIndex != std::wstring::npos)
+    {
+        IntegerStr = InputStr.substr(0, PIndex);
+        FractionStr = InputStr.substr(PIndex + 1);
+        while (!FractionStr.empty() && FractionStr.back() == L'0')
+            FractionStr.pop_back();
+    }
+    else
+        IntegerStr = std::move(InputStr);
 
-openjtalk* ojtins = nullptr;
+    if (IntegerStr != L"0")
+    {
+        size_t MaxIntegerStrLength = IntegerStr.length();
+        for (; MaxIntegerStrLength > 0; --MaxIntegerStrLength)
+            if (IntegerStr[MaxIntegerStrLength - 1] != L'0')
+                break;
+        if (MaxIntegerStrLength < 1)
+            MaxIntegerStrLength = 1;
+
+        const auto DigitNum = IntegerStr.length();
+        for (size_t i = 0; i < MaxIntegerStrLength; i++)
+        {
+            const auto NumberIndex = IntegerStr[i] - L'0';
+            const auto DigitIndex = DigitNum - i - 1;
+            if (0 == NumberIndex)
+            {
+                if ((i > 0 && L'0' == IntegerStr[i - 1]) || i == IntegerStr.length() - 1)
+                    continue;
+                if (DigitIndex >= 4 && 0 == DigitIndex % 4)
+                    StrRtn += ChineseNumberDigit[DigitIndex];
+                else
+                    StrRtn += ChineseNumber[NumberIndex];
+            }
+            else
+            {
+                StrRtn += ChineseNumber[NumberIndex];
+                if (IntegerStr.length() == 2 && IntegerStr[0] == '1' && i == 0)
+                    StrRtn.erase(0);
+                if (0 == DigitIndex % 4)
+                    StrRtn += ChineseNumberDigit[DigitIndex];
+                else
+                    StrRtn += ChineseNumberDigit[DigitIndex % 4];
+            }
+        }
+    }
+    else
+        StrRtn += L"零";
+
+    if (!FractionStr.empty())
+        StrRtn += L"点";
+    for (const auto FractionI : FractionStr)
+    {
+        const auto NumberIndex = FractionI - L'0';
+        StrRtn += ChineseNumber[NumberIndex];
+    }
+    return StrRtn;
+}
+
+std::wstring ChineseNormalize(const std::wstring& _Input)
+{
+    std::wstring RtnStr;
+    const auto StrVec = SplitString(_Input, NumberRegex, { -1, 0 });
+    for (const auto& Str : StrVec)
+    {
+        if (std::regex_match(Str, NumberRegex))
+            RtnStr += NumberToChinese(_wtof(Str.c_str()));
+        else
+            RtnStr += Str;
+    }
+    return RtnStr;
+}
 
 std::string to_byte_string(const std::wstring& input)
 {
+#ifdef _WIN32
+    std::vector<char> ByteString(input.length() * 6);
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        input.c_str(),
+        int(input.length()),
+        ByteString.data(),
+        int(ByteString.size()),
+        nullptr,
+        nullptr
+    );
+    return ByteString.data();
+#else
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     return converter.to_bytes(input);
+#endif
 }
 
 std::wstring to_wide_string(const std::string& input)
 {
+#ifdef _WIN32
+    std::vector<wchar_t> WideString(input.length() * 2);
+    MultiByteToWideChar(
+        CP_UTF8,
+        0,
+        input.c_str(),
+        int(input.length()),
+        WideString.data(),
+        int(WideString.size())
+    );
+    return WideString.data();
+#else
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     return converter.from_bytes(input);
+#endif
 }
 
-openjtalk::openjtalk()
+class OpenJTalk
 {
-    mecab = new Mecab;
-    njd = new NJD;
-    jpcommon = new JPCommon;
-    JPCommon_initialize(jpcommon);
-    Mecab_initialize(mecab);
-    NJD_initialize(njd);
-    Mecab_load(mecab, "cleaners\\");
-}
+public:
+	friend class Instance;
+	friend class std::shared_ptr<OpenJTalk>;
+    struct _MyPhoneme { wchar_t P_2[8]; wchar_t P_1[8]; wchar_t P0[8]; wchar_t P1[8]; wchar_t P2[8]; };
+    struct _MyA { int8_t A1; uint8_t A2; uint8_t A3; };
+    struct _MyB { wchar_t B1[8]; wchar_t B2[8]; wchar_t B3[8]; };
+	struct _MyC { wchar_t C1[8]; wchar_t C2[8]; wchar_t C3[8]; };
+	struct _MyD { wchar_t D1[8]; wchar_t D2[8]; wchar_t D3[8]; };
+	struct _MyE { uint8_t E1; uint8_t E2; bool E3; wchar_t E4[8]; bool E5; };
+	struct _MyF { uint8_t F1; uint8_t F2; bool F3; wchar_t F4[8]; uint8_t F5; uint8_t F6; uint8_t F7; uint8_t F8; };
+	struct _MyG { uint8_t G1; uint8_t G2; bool G3; wchar_t G4[8]; bool G5; };
+	struct _MyH { uint8_t H1; uint8_t H2; };
+	struct _MyI { uint8_t I1; uint8_t I2; uint8_t I3; uint8_t I4; uint8_t I5; uint8_t I6; uint8_t I7; uint8_t I8; };
+	struct _MyJ { uint8_t J1; uint8_t J2; };
+	struct _MyK { uint8_t K1; uint8_t K2; uint8_t K3; };
+    struct FullContext
+    {
+        _MyPhoneme Phoneme;
+        _MyA A; _MyB B; _MyC C; _MyD D; _MyE E;
+        _MyF F; _MyG G; _MyH H; _MyI I; _MyJ J;
+        _MyK K;
+    };
+    OpenJTalk(const char* folder)
+    {
+        mecab = new Mecab;
+        njd = new NJD;
+        jpcommon = new JPCommon;
+        JPCommon_initialize(jpcommon);
+        Mecab_initialize(mecab);
+        NJD_initialize(njd);
+        Mecab_load(mecab, folder);
+    }
+    ~OpenJTalk() {
+        Refresh();
+        if (mecab)
+            Mecab_clear(mecab);
+        if (njd)
+            NJD_clear(njd);
+        if (jpcommon)
+            JPCommon_clear(jpcommon);
+        delete mecab;
+        delete njd;
+        delete jpcommon;
+        jpcommon = nullptr;
+        mecab = nullptr;
+        njd = nullptr;
+    }
+    void Refresh() const
+    {
+        if (njd)
+            NJD_refresh(njd);
+        if (mecab)
+            Mecab_refresh(mecab);
+        if (jpcommon)
+            JPCommon_refresh(jpcommon);
+    }
+    static FullContext Extract(const std::wstring& _Context)
+    {
+		FullContext _TmpContext{};
+        std::wsmatch Matched;
+		if (std::regex_search(_Context, Matched, _PhonemeInfoRegex))
+		{
+			wcscpy_s(_TmpContext.Phoneme.P_2, Matched[1].str().c_str());
+			wcscpy_s(_TmpContext.Phoneme.P_1, Matched[2].str().c_str());
+			wcscpy_s(_TmpContext.Phoneme.P0, Matched[3].str().c_str());
+			wcscpy_s(_TmpContext.Phoneme.P1, Matched[4].str().c_str());
+			wcscpy_s(_TmpContext.Phoneme.P2, Matched[5].str().c_str());
+		}
+		if (std::regex_search(_Context, Matched, _AInfoGroupRegex))
+		{
+			_TmpContext.A.A1 = int8_t(_Impl_To_Int(Matched[1].str()));
+			_TmpContext.A.A2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+			_TmpContext.A.A3 = uint8_t(_Impl_To_Int(Matched[3].str()));
+		}
+        if (std::regex_search(_Context, Matched, _BInfoGroupRegex))
+        {
+            wcscpy_s(_TmpContext.B.B1, Matched[1].str().c_str());
+			wcscpy_s(_TmpContext.B.B2, Matched[2].str().c_str());
+			wcscpy_s(_TmpContext.B.B3, Matched[3].str().c_str());
+        }
+        if (std::regex_search(_Context, Matched, _CInfoGroupRegex))
+        {
+            wcscpy_s(_TmpContext.C.C1, Matched[1].str().c_str());
+			wcscpy_s(_TmpContext.C.C2, Matched[2].str().c_str());
+			wcscpy_s(_TmpContext.C.C3, Matched[3].str().c_str());
+        }
+		if (std::regex_search(_Context, Matched, _DInfoGroupRegex))
+		{
+			wcscpy_s(_TmpContext.D.D1, Matched[1].str().c_str());
+			wcscpy_s(_TmpContext.D.D2, Matched[2].str().c_str());
+			wcscpy_s(_TmpContext.D.D3, Matched[3].str().c_str());
+		}
+		if (std::regex_search(_Context, Matched, _EInfoGroupRegex))
+		{
+			_TmpContext.E.E1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+			_TmpContext.E.E2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+			_TmpContext.E.E3 = _Impl_To_Int(Matched[3].str());
+			wcscpy_s(_TmpContext.E.E4, Matched[4].str().c_str());
+			_TmpContext.E.E5 = _Impl_To_Int(Matched[5].str());
+		}
+		if (std::regex_search(_Context, Matched, _FInfoGroupRegex))
+		{
+			_TmpContext.F.F1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+			_TmpContext.F.F2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+			_TmpContext.F.F3 = _Impl_To_Int(Matched[3].str());
+			wcscpy_s(_TmpContext.F.F4, Matched[4].str().c_str());
+			_TmpContext.F.F5 = uint8_t(_Impl_To_Int(Matched[5].str()));
+			_TmpContext.F.F6 = uint8_t(_Impl_To_Int(Matched[6].str()));
+			_TmpContext.F.F7 = uint8_t(_Impl_To_Int(Matched[7].str()));
+			_TmpContext.F.F8 = uint8_t(_Impl_To_Int(Matched[8].str()));
+		}
+		if (std::regex_search(_Context, Matched, _GInfoGroupRegex))
+		{
+			_TmpContext.G.G1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+			_TmpContext.G.G2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+			_TmpContext.G.G3 = _Impl_To_Int(Matched[3].str());
+			wcscpy_s(_TmpContext.G.G4, Matched[4].str().c_str());
+			_TmpContext.G.G5 = _Impl_To_Int(Matched[5].str());
+		}
+		if (std::regex_search(_Context, Matched, _HInfoGroupRegex))
+		{
+			_TmpContext.H.H1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+			_TmpContext.H.H2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+		}
+		if (std::regex_search(_Context, Matched, _IInfoGroupRegex))
+		{
+			_TmpContext.I.I1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+			_TmpContext.I.I2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+			_TmpContext.I.I3 = uint8_t(_Impl_To_Int(Matched[3].str()));
+			_TmpContext.I.I4 = uint8_t(_Impl_To_Int(Matched[4].str()));
+			_TmpContext.I.I5 = uint8_t(_Impl_To_Int(Matched[5].str()));
+			_TmpContext.I.I6 = uint8_t(_Impl_To_Int(Matched[6].str()));
+			_TmpContext.I.I7 = uint8_t(_Impl_To_Int(Matched[7].str()));
+			_TmpContext.I.I8 = uint8_t(_Impl_To_Int(Matched[8].str()));
+		}
+        if (std::regex_search(_Context, Matched, _JInfoGroupRegex))
+		{
+			_TmpContext.J.J1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+			_TmpContext.J.J2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+		}
+		if (std::regex_search(_Context, Matched, _KInfoGroupRegex))
+		{
+			_TmpContext.K.K1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+			_TmpContext.K.K2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+			_TmpContext.K.K3 = uint8_t(_Impl_To_Int(Matched[3].str()));
+		}
+		return _TmpContext;
+	}
+    void ExtractFullContext(const wchar_t* _InputText)
+    {
+		_MyData.clear();
+		const auto Text = to_byte_string(_InputText);
+        char Buffer[1024 * 8];
+        text2mecab(Buffer, Text.c_str());
+        Mecab_analysis(mecab, Buffer);
+        mecab2njd(njd, Mecab_get_feature(mecab), Mecab_get_size(mecab));
+        njd_set_pronunciation(njd);
+        njd_set_digit(njd);
+        njd_set_accent_phrase(njd);
+        njd_set_accent_type(njd);
+        njd_set_unvoiced_vowel(njd);
+        njd_set_long_vowel(njd);
+        njd2jpcommon(jpcommon, njd);
+        JPCommon_make_label(jpcommon);
+        const int label_size = JPCommon_get_label_size(jpcommon);
+        char** label_feature = JPCommon_get_label_feature(jpcommon);
+		_MyData.reserve(label_size);
+        for (int i = 0; i < label_size; i++)
+			_MyData.emplace_back(Extract(to_wide_string(label_feature[i])));
+        Refresh();
+    }
+    void operator()(std::wstring InputSeq, std::vector<PhonemeAndTone>& OutRes)
+    {
+        for (const auto& it : _DefaultJapaneseReplaceRegexDict)
+            InputSeq = std::regex_replace(InputSeq, it.first, it.second);
+		ExtractFullContext(InputSeq.c_str());
+		for (size_t Index = 0; Index < _MyData.size(); ++Index)
+		{
+			const auto& This = _MyData[Index];
+            OutRes.emplace_back();
+			wcscpy_s(OutRes.back().Phoneme, This.Phoneme.P0);
+            if (wcscmp(This.Phoneme.P0, L"sil") == 0 || wcscmp(This.Phoneme.P0, L"pau") == 0)
+	            continue;
 
-openjtalk::openjtalk(const char* folder)
+            const auto& Next = _MyData[Index + 1];
+            int Next2;
+            if (wcscmp(Next.Phoneme.P0, L"sil") == 0 || wcscmp(Next.Phoneme.P0, L"pau") == 0)
+                Next2 = -1;
+            else
+                Next2 = Next.A.A2;
+            if (This.A.A3 == 1 && Next2 == 1)
+            {
+				OutRes.emplace_back();
+				OutRes.back().Phoneme[0] = L' ';
+				OutRes.back().Tone = 0;
+            }
+            else if (This.A.A1 == 0 && Next2 == This.A.A2 + 1 && This.A.A2 != This.F.F1)
+                OutRes.back().Tone = -1;
+            else if (This.A.A3 == 1 && Next2 == 1)
+                OutRes.back().Tone = 1;
+		}
+    }
+protected:
+    std::vector<FullContext> _MyData;
+private:
+    OpenJTalk(const OpenJTalk&) = delete;
+    OpenJTalk(OpenJTalk&& right) noexcept = delete;
+    OpenJTalk& operator=(const OpenJTalk&) = delete;
+    OpenJTalk& operator=(OpenJTalk&& right) noexcept = delete;
+
+    Mecab* mecab = nullptr;
+    NJD* njd = nullptr;
+    JPCommon* jpcommon = nullptr;
+};
+
+class ChineseDict
 {
-    mecab = new Mecab;
-    njd = new NJD;
-    jpcommon = new JPCommon;
-    JPCommon_initialize(jpcommon);
-    Mecab_initialize(mecab);
-    NJD_initialize(njd);
-    Mecab_load(mecab, folder);
-}
-
-openjtalk::~openjtalk()
-{
-    Mecab_clear(mecab);
-    NJD_clear(njd);
-    JPCommon_clear(jpcommon);
-    delete mecab;
-    delete njd;
-    delete jpcommon;
-    jpcommon = nullptr;
-    mecab = nullptr;
-    njd = nullptr;
-}
-
-void openjtalk::run_frontend(const char* input) const
-{
-    std::vector<char> buff(1024ull * 1024);
-    text2mecab(buff.data(), input);
-    Mecab_analysis(mecab, buff.data());
-    mecab2njd(njd, Mecab_get_feature(mecab), Mecab_get_size(mecab));
-    njd_set_pronunciation(njd);
-    njd_set_digit(njd);
-    njd_set_accent_phrase(njd);
-    njd_set_accent_type(njd);
-    njd_set_unvoiced_vowel(njd);
-    njd_set_long_vowel(njd);
-    //auto features = njd2feature(njd);
-
-    //NJD_refresh(njd);
-    Mecab_refresh(mecab);
-    //return features;
-}
-
-std::vector<std::wstring> extract_fullcontext(const openjtalk& ojt, const char* text, bool run_marine = false)
-{
-    ojt.run_frontend(text);
-    return ojt.make_label();
-}
-
-std::vector<std::wstring> openjtalk::make_label() const
-{
-    //feature2njd(njd, njd_features);
-    njd2jpcommon(jpcommon, njd);
-    JPCommon_make_label(jpcommon);
-    const int label_size = JPCommon_get_label_size(jpcommon);
-    char** label_feature = JPCommon_get_label_feature(jpcommon);
-    std::vector<std::wstring> labels;
-    labels.reserve(label_size);
-    for (int i = 0; i < label_size; i++)
-        labels.push_back(to_wide_string(label_feature[i]));
-    JPCommon_refresh(jpcommon);
-    NJD_refresh(njd);
-    return labels;
-}
+public:
+    friend class Instance;
+	friend class std::shared_ptr<ChineseDict>;
+    ChineseDict() = delete;
+    void Search(std::wstring InputSeq, std::vector<PhonemeAndTone>& OutRes) {
+        InputSeq = ChineseNormalize(InputSeq);
+        if (std::regex_match(InputSeq, SignRegex))
+        {
+            std::wsregex_token_iterator Iter(InputSeq.begin(), InputSeq.end(), SignRegexSingle, 0);
+            std::wsregex_token_iterator End;
+            for (; Iter != End; ++Iter)
+            {
+	            OutRes.emplace_back();
+                wcscpy_s(OutRes.back().Phoneme, Iter->str().c_str());
+				OutRes.back().Tone = 0;
+            }
+            return;
+        }
+        while (!InputSeq.empty())
+        {
+            for (size_t SearchLength = min(MaxSize, InputSeq.length()); SearchLength > 0; --SearchLength)
+            {
+                const auto SearchResult = _Dict.find(InputSeq.substr(0, SearchLength));
+                if (SearchResult != _Dict.end() && SearchResult->second.Phone.size() == SearchResult->second.Tone.size())
+                {
+                    for (size_t i = 0; i < SearchResult->second.Phone.size(); ++i)
+                    {
+	                    OutRes.emplace_back();
+						wcscpy_s(OutRes.back().Phoneme, SearchResult->second.Phone[i].c_str());
+						OutRes.back().Tone = static_cast<int64_t>((uint8_t)SearchResult->second.Tone[i]);
+                    }
+                    InputSeq = InputSeq.substr(SearchLength);
+                    break;
+                }
+                if (SearchLength == 1)
+                {
+					OutRes.emplace_back();
+                    wcscpy_s(OutRes.back().Phoneme, L"[UNK]");
+                    InputSeq = InputSeq.substr(1);
+                }
+            }
+        }
+    }
+    ChineseDict(const char* path)
+    {
+        _Dict.clear();
+        const MJson _DictJson(path);
+        const auto Arr = _DictJson.GetMemberArray();
+        for (const auto& it : Arr)
+        {
+            DictData _TmpData;
+            const auto NameStr = to_wide_string(it.first);
+            if (NameStr.size() > MaxSize)
+                MaxSize = NameStr.size();
+            for (const auto& phone : it.second["phoneme"].GetArray())
+                _TmpData.Phone.emplace_back(to_wide_string(phone.GetString()));
+            for (const auto& tone : it.second["tone"].GetArray())
+                _TmpData.Tone.emplace_back(int8_t(tone.GetInt64()));
+            _Dict[NameStr] = std::move(_TmpData);
+        }
+    }
+private:
+    struct DictData
+    {
+        std::vector<std::wstring> Phone;
+        std::vector<int8_t> Tone;
+    };
+    size_t MaxSize = 0;
+    std::unordered_map<std::wstring, DictData> _Dict;
+};
 
 void getRealSokuon(std::wstring& tmpStr)
 {
@@ -185,1053 +572,88 @@ void replaceSymbol(std::wstring& tmpStr)
     tmpStr = std::regex_replace(tmpStr, std::wregex(L"！"), L"!");
 }
 
-void divide(std::wstring s, std::vector<std::wstring>& v, const std::wregex& reg)
+class Instance
 {
-    std::wsmatch mResult;
-    while (regex_search(s, mResult, reg))
+public:
+	Instance() = delete;
+    Instance(const wchar_t* _Path)
     {
-        v.emplace_back(mResult[0].str());
-        s = mResult.suffix();
+		auto OjtPath = _Path + std::wstring(L"/Japanese");
+		auto ChinsesDictPath = _Path + std::wstring(L"/Chinese/dict.json");
+        _OpenJTalk = std::make_shared<OpenJTalk>(to_byte_string(OjtPath).c_str());
+        _ChineseDict = std::make_shared<ChineseDict>(to_byte_string(ChinsesDictPath).c_str());
     }
-}
 
-void CreateOjt(const wchar_t* folder)
-{
-    if (!ojtins)
-        ojtins = new openjtalk(to_byte_string(folder).c_str());
-}
-
-CleanerType CheckType(std::wstring& input)
-{
-    size_t ret = input.find(L"[Japanese1]");
-    if (ret != std::wstring::npos)
-    {
-        input = input.substr(11);
-        return CleanerType::Cleaner1;
-    }
-    ret = input.find(L"[Japanese2]");
-    if (ret != std::wstring::npos)
-    {
-        input = input.substr(11);
-        return CleanerType::Cleaner2;
-    }
-    ret = input.find(L"[Ipa1]");
-    if (ret != std::wstring::npos)
-    {
-        input = input.substr(6);
-        return CleanerType::Ipa1;
-    }
-    ret = input.find(L"[Ipa2]");
-    if (ret != std::wstring::npos)
-    {
-        input = input.substr(6);
-        return CleanerType::Ipa2;
-    }
-    ret = input.find(L"[Ipa3]");
-    if (ret != std::wstring::npos)
-    {
-        input = input.substr(6);
-        return CleanerType::Ipa3;
-    }
-    return CleanerType::Cleaner2;
-}
-
-void Release()
-{
-    return;
-}
-
-void ReleaseOjt()
-{
-    delete ojtins;
-    ojtins = nullptr;
-}
-
-void JapaneseCleaner(std::wstring& input)
-{
-    if (!ojtins)
-        ojtins = new openjtalk();
-
-    const std::wregex _characters(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]");
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex ph(L"\\-([^\\+]*)\\+");
-    const std::wregex nm(L"/F:(\\d+)_");
-    const std::wregex a11(L"/A:(\\-?[0-9]+)\\+");
-    const std::wregex a22(L"\\+(\\d+)\\+");
-    const std::wregex a33(L"\\+(\\d+)/");
-
-    auto& CleanedString = _CleanedData.get();
-    CleanedString.clear();
-
-    const CleanerType Ctype = CheckType(input);
-
-    if (!std::regex_search(input, _marks))
-        input += L'。';
-    std::vector<std::wstring> sentences;
-    std::vector<std::wstring> marks;
-    divide(input, sentences, _sentence);
-    divide(input, marks, _marks);
-
-    bool SymbolFirst = false;
-    if (input.find(marks[0]) == 0)
-        SymbolFirst = true;
-
-    size_t SymbolIndex = 0;
-    for (const auto & asentence : sentences)
-    {
-        if(SymbolFirst && SymbolIndex < marks.size())
-            CleanedString += std::regex_replace(marks[SymbolIndex], std::wregex(L""), L"");
-        auto labels = extract_fullcontext(*ojtins, to_byte_string(asentence).c_str());
-        for (size_t it = 0; it < labels.size(); ++it)
+	void* Convert(
+        const std::wstring& InputText,
+        const std::string& LanguageID,
+        const void*
+    )
+	{
+        OutRes.clear();
+        auto InputSeq = SplitString(InputText, std::wregex(LR"([\r\n])"));
+        if (LanguageID == "Chinese")
         {
-            std::wsmatch mResult;
-            std::regex_search(labels[it], mResult, ph);
-            std::wstring phoneme = mResult[1].str();
-            if (phoneme == L"sil" || phoneme == L"pau")
-                continue;
-            else
-            {
-                phoneme = std::regex_replace(phoneme, std::wregex(L"ch"), L"ʧ");
-                phoneme = std::regex_replace(phoneme, std::wregex(L"sh"), L"ʃ");
-                phoneme = std::regex_replace(phoneme, std::wregex(L"cl"), L"Q");
-                if (Ctype == CleanerType::Cleaner2)
-                    phoneme = std::regex_replace(phoneme, std::wregex(L"ts"), L"ʦ");
-                CleanedString += phoneme;
-            }
-            std::regex_search(labels[it], mResult, nm);
-            const auto n_moras = _wtoi(mResult[1].str().c_str());
-            std::regex_search(labels[it], mResult, a11);
-            const auto a1 = _wtoi(mResult[1].str().c_str());
-            std::regex_search(labels[it], mResult, a22);
-            const auto a2 = _wtoi(mResult[1].str().c_str());
-            std::regex_search(labels[it], mResult, a33);
-            const auto a3 = _wtoi(mResult[1].str().c_str());
-            std::regex_search(labels[it + 1], mResult, ph);
-            std::wstring nephoneme = mResult[1].str();
-            int a2_next;
-            if (nephoneme == L"sil" || nephoneme == L"pau")
-            	a2_next = -1;
-            else
-            {
-                std::regex_search(labels[it + 1], mResult, a22);
-                a2_next = _wtoi(mResult[1].str().c_str());
-            }
-            if (a3 == 1 && a2_next == 1)
-                CleanedString += L' ';
-            else if (a1 == 0 && a2_next == a2 + 1 && a2 != n_moras)
-                CleanedString += L"↓";
-            else if (a3 == 1 && a2_next == 1)
-                CleanedString += L"↑";
-        }
-        if (!SymbolFirst && SymbolIndex < marks.size())
-            CleanedString += std::regex_replace(marks[SymbolIndex], std::wregex(L""), L"");
-        ++SymbolIndex;
-    }
-    if (Ctype != CleanerType::Cleaner1 && Ctype != CleanerType::Cleaner2)
-    {
-        getRealSokuon(CleanedString);
-        getRealHatsuon(CleanedString);
-    }
-    switch(Ctype)
-    {
-    case CleanerType::Ipa1:
-    {
-        getIpaStr1(CleanedString);
-        break;
-    }
-    case CleanerType::Ipa2:
-    {
-        getIpaStr2(CleanedString);
-        break;
-    }
-    case CleanerType::Ipa3:
-    {
-        getIpaStr2(CleanedString);
-        getIpaStr3(CleanedString);
-        break;
-    }
-    default:
-    {
-        break;
-    }
-    }
-    replaceSymbol(CleanedString);
-}
-
-const wchar_t* PluginMain(const wchar_t* input)
-{
-    std::wstring _inp = input;
-    JapaneseCleaner(_inp);
-    return _CleanedData.get().c_str();
-}
-
-/*
-void getSPhoneme(std::wstring& tmpStr, const std::wstring& ita)
-{
-    const auto labels = extract_fullcontext(*ojtins, to_byte_string(ita).c_str());
-    for (size_t it = 0; it < labels.size(); ++it)
-    {
-        const std::wregex ph(L"\\-([^\\+]*)\\+");
-        const std::wregex nm(L"/F:(\\d+)_");
-        const std::wregex a11(L"/A:(\\-?[0-9]+)\\+");
-        const std::wregex a22(L"\\+(\\d+)\\+");
-        const std::wregex a33(L"\\+(\\d+)/");
-        std::wsmatch mResult;
-        std::regex_search(labels[it], mResult, ph);
-        std::wstring phoneme = mResult[1].str();
-        if (phoneme == L"sil" || phoneme == L"pau")
-            continue;
-        else
-        {
-            phoneme = std::regex_replace(phoneme, std::wregex(L"ch"), L"ʧ");
-            phoneme = std::regex_replace(phoneme, std::wregex(L"sh"), L"ʃ");
-            phoneme = std::regex_replace(phoneme, std::wregex(L"cl"), L"Q");
-            phoneme = std::regex_replace(phoneme, std::wregex(L"ts"), L"ʦ");
-            tmpStr += phoneme;
-        }
-        std::regex_search(labels[it], mResult, nm);
-        const auto n_moras = _wtoi(mResult[1].str().c_str());
-        std::regex_search(labels[it], mResult, a11);
-        const auto a1 = _wtoi(mResult[1].str().c_str());
-        std::regex_search(labels[it], mResult, a22);
-        const auto a2 = _wtoi(mResult[1].str().c_str());
-        std::regex_search(labels[it], mResult, a33);
-        const auto a3 = _wtoi(mResult[1].str().c_str());
-        std::regex_search(labels[it + 1], mResult, ph);
-        std::wstring nephoneme = mResult[1].str();
-        int a2_next;
-        if (nephoneme == L"sil" || nephoneme == L"pau")
-            a2_next = -1;
-        else
-        {
-            std::regex_search(labels[it + 1], mResult, a22);
-            a2_next = _wtoi(mResult[1].str().c_str());
-        }
-        if (a3 == 1 && a2_next == 1)
-            continue;
-        else if (a1 == 0 && a2_next == a2 + 1 && a2 != n_moras)
-            tmpStr += L"↓";
-        else if (a3 == 1 && a2_next == 1)
-            tmpStr += L"↑";
-    }
-}
-
-const wchar_t* extractFullContext(const wchar_t* input)
-{
-    if (!ojtins)
-        return nullptr;
-    if (!globalStrW)
-        globalStrW = new std::wstring;
-    globalStrW->clear();
-    const auto out = extract_fullcontext(*ojtins, to_byte_string(input).c_str());
-    for (const auto& ph : out)
-    {
-        *globalStrW += ph;
-        *globalStrW += L"\n";
-    }
-    return globalStrW->c_str();
-}
-
-const wchar_t* getKana(const wchar_t* input)
-{
-    if (!ojtins)
-        return nullptr;
-    if (!globalStrW)
-        globalStrW = new std::wstring;
-    globalStrW->clear();
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wstring inputTxt = input;
-    std::vector<std::wstring> sentences;
-    std::vector<std::wstring> marks;
-    divide(inputTxt, sentences, _sentence);
-    divide(inputTxt, marks, _marks);
-    size_t i = 0;
-    for(const auto& ita : sentences)
-    {
-        ojtins->run_frontend(to_byte_string(ita).c_str());
-        const auto features = ojtins->getfeature();
-        for (const auto& it : features)
-        {
-            if (it.pos == std::string("記号"))
-            {
-                *globalStrW += to_wide_string(std::regex_replace(it.str, std::regex("’"), ""));
-            }
-            else
-            {
-                *globalStrW += to_wide_string(std::regex_replace(it.pron, std::regex("’"), ""));
-            }
-        }
-        ojtins->refresh();
-        if (i < marks.size())
-        {
-            *globalStrW += marks[i++];
-        }
-    }
-    return globalStrW->c_str();
-}
-
-const wchar_t* getPhoneme(const wchar_t* input)
-{
-    if (!ojtins)
-        return nullptr;
-    if (!globalStrW)
-        globalStrW = new std::wstring;
-    globalStrW->clear();
-
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex ph(L"\\-([^\\+]*)\\+");
-
-    const std::wstring inputTxt = input;
-    std::vector<std::wstring> sentences;
-    std::vector<std::wstring> marks;
-    divide(inputTxt, sentences, _sentence);
-    divide(inputTxt, marks, _marks);
-    size_t i = 0;
-    for (const auto& ita : sentences)
-    {
-        const auto labels = extract_fullcontext(*ojtins, to_byte_string(ita).c_str());
-        for (const auto& it : labels)
-        {
-            std::wsmatch mResult;
-            std::regex_search(it, mResult, ph);
-            std::wstring phoneme = mResult[1].str();
-            if (phoneme == L"sil" || phoneme == L"pau")
-                continue;
-            else
-            {
-                phoneme = std::regex_replace(phoneme, std::wregex(L"ch"), L"ʧ");
-                phoneme = std::regex_replace(phoneme, std::wregex(L"sh"), L"ʃ");
-                phoneme = std::regex_replace(phoneme, std::wregex(L"cl"), L"Q");
-                phoneme = std::regex_replace(phoneme, std::wregex(L"ts"), L"ʦ");
-                *globalStrW += phoneme;
-            }
-        }
-        if (i < marks.size())
-            *globalStrW += marks[i++];
-    }
-    return globalStrW->c_str();
-}
-
-const wchar_t* getRomaji(const wchar_t* input)
-{
-    if (!ojtins)
-        return nullptr;
-    if (!globalStrW)
-        globalStrW = new std::wstring;
-    globalStrW->clear();
-
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex ph(L"\\-([^\\+]*)\\+");
-
-    const std::wstring inputTxt = input;
-    std::vector<std::wstring> sentences;
-    std::vector<std::wstring> marks;
-    divide(inputTxt, sentences, _sentence);
-    divide(inputTxt, marks, _marks);
-    size_t i = 0;
-    for (const auto& ita : sentences)
-    {
-        const auto labels = extract_fullcontext(*ojtins, to_byte_string(ita).c_str());
-        for (const auto& it : labels)
-        {
-            std::wsmatch mResult;
-            std::regex_search(it, mResult, ph);
-            std::wstring phoneme = mResult[1].str();
-            if (phoneme == L"sil" || phoneme == L"pau")
-                continue;
-            else
-            {
-                phoneme = std::regex_replace(phoneme, std::wregex(L"cl"), L"Q");
-                *globalStrW += phoneme;
-            }
-        }
-        if (i < marks.size())
-            *globalStrW += marks[i++];
-    }
-    return globalStrW->c_str();
-}
-
-const wchar_t* getIpa1(const wchar_t* input)
-{
-    if (!ojtins)
-        return nullptr;
-    if (!globalStrW)
-        globalStrW = new std::wstring;
-    globalStrW->clear();
-
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wstring inputTxt = input;
-    std::vector<std::wstring> sentences;
-    std::vector<std::wstring> marks;
-    divide(inputTxt, sentences, _sentence);
-    divide(inputTxt, marks, _marks);
-    size_t i = 0;
-    for (const auto& ita : sentences)
-    {
-        std::wstring tmpStr;
-        getSPhoneme(tmpStr, ita);
-        getIpaStr1(tmpStr);
-        *globalStrW += tmpStr;
-        if (i < marks.size())
-            *globalStrW += marks[i++];
-    }
-    return globalStrW->c_str();
-}
-
-const wchar_t* getIpa2(const wchar_t* input)
-{
-    if (!ojtins)
-        return nullptr;
-    if (!globalStrW)
-        globalStrW = new std::wstring;
-    globalStrW->clear();
-
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wstring inputTxt = input;
-    std::vector<std::wstring> sentences;
-    std::vector<std::wstring> marks;
-    divide(inputTxt, sentences, _sentence);
-    divide(inputTxt, marks, _marks);
-    size_t i = 0;
-    for (const auto& ita : sentences)
-    {
-        std::wstring tmpStr;
-        getSPhoneme(tmpStr, ita);
-        getIpaStr2(tmpStr);
-        *globalStrW += tmpStr;
-        if (i < marks.size())
-            *globalStrW += marks[i++];
-    }
-    return globalStrW->c_str();
-}
-
-const wchar_t* getIpa1WithBlank(const wchar_t* input)
-{
-    if (!ojtins)
-        return nullptr;
-    if (!globalStrW)
-        globalStrW = new std::wstring;
-    globalStrW->clear();
-
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wstring inputTxt = input;
-    std::vector<std::wstring> sentences;
-    std::vector<std::wstring> marks;
-    divide(inputTxt, sentences, _sentence);
-    divide(inputTxt, marks, _marks);
-    size_t i = 0;
-    const std::wregex blankPos(L"([aiueo↓↑AIUEOQN])([AIUEOaiueoʦʃʧbcdfghjklmnpqrstvwxyzQ])");
-    for (const auto& ita : sentences)
-    {
-        std::wstring tmpStr;
-        getSPhoneme(tmpStr, ita);
-        while (std::regex_search(tmpStr, blankPos))
-            tmpStr = std::regex_replace(tmpStr, blankPos, L"$1 $2");
-        getIpaStr1(tmpStr);
-        *globalStrW += tmpStr;
-        if (i < marks.size())
-            *globalStrW += marks[i++];
-    }
-    return globalStrW->c_str();
-}
-
-const wchar_t* getIpa2WithBlank(const wchar_t* input)
-{
-    if (!ojtins)
-        return nullptr;
-    if (!globalStrW)
-        globalStrW = new std::wstring;
-    globalStrW->clear();
-
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wstring inputTxt = input;
-    std::vector<std::wstring> sentences;
-    std::vector<std::wstring> marks;
-    divide(inputTxt, sentences, _sentence);
-    divide(inputTxt, marks, _marks);
-    size_t i = 0;
-    const std::wregex blankPos(L"([aiueo↓↑AIUEOQN])([AIUEOaiueoʦʃʧbcdfghjklmnpqrstvwxyzQ])");
-    for (const auto& ita : sentences)
-    {
-        std::wstring tmpStr;
-        getSPhoneme(tmpStr, ita);
-        while (std::regex_search(tmpStr, blankPos))
-            tmpStr = std::regex_replace(tmpStr, blankPos, L"$1 $2");
-        getIpaStr2(tmpStr);
-        *globalStrW += tmpStr;
-        if (i < marks.size())
-            *globalStrW += marks[i++];
-    }
-    return globalStrW->c_str();
-}
-
-const wchar_t* getPhonemeWithBlank(const wchar_t* input)
-{
-    if (!ojtins)
-        return nullptr;
-    if (!globalStrW)
-        globalStrW = new std::wstring;
-    globalStrW->clear();
-
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex ph(L"\\-([^\\+]*)\\+");
-
-    const std::wstring inputTxt = input;
-    std::vector<std::wstring> sentences;
-    std::vector<std::wstring> marks;
-    divide(inputTxt, sentences, _sentence);
-    divide(inputTxt, marks, _marks);
-    size_t i = 0;
-    const std::wregex blankPos(L"([aiueoAIUEOQN])([AIUEOaiueoʦʃʧbcdfghjklmnpqrstvwxyzQ])");
-    for (const auto& ita : sentences)
-    {
-        std::wstring tmpStr;
-        const auto labels = extract_fullcontext(*ojtins, to_byte_string(ita).c_str());
-        for (const auto& it : labels)
-        {
-            std::wsmatch mResult;
-            std::regex_search(it, mResult, ph);
-            std::wstring phoneme = mResult[1].str();
-            if (phoneme == L"sil" || phoneme == L"pau")
-                continue;
-            else
-            {
-                phoneme = std::regex_replace(phoneme, std::wregex(L"ch"), L"ʧ");
-                phoneme = std::regex_replace(phoneme, std::wregex(L"sh"), L"ʃ");
-                phoneme = std::regex_replace(phoneme, std::wregex(L"cl"), L"Q");
-                phoneme = std::regex_replace(phoneme, std::wregex(L"ts"), L"ʦ");
-                tmpStr += phoneme;
-            }
-        }
-        while (std::regex_search(tmpStr, blankPos))
-            tmpStr = std::regex_replace(tmpStr, blankPos, L"$1 $2");
-        *globalStrW += tmpStr;
-        if (i < marks.size())
-            *globalStrW += marks[i++];
-    }
-    return globalStrW->c_str();
-}
-
-const wchar_t* getRomajiWithBlank(const wchar_t* input)
-{
-    if (!ojtins)
-        return nullptr;
-    if (!globalStrW)
-        globalStrW = new std::wstring;
-    globalStrW->clear();
-
-    const std::wregex _marks(L"[^A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex _sentence(L"[A-Za-z\\d\u3005\u3040-\u30ff\u4e00-\u9fff\uff11-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uff9d]+");
-    const std::wregex ph(L"\\-([^\\+]*)\\+");
-
-    const std::wstring inputTxt = input;
-    std::vector<std::wstring> sentences;
-    std::vector<std::wstring> marks;
-    divide(inputTxt, sentences, _sentence);
-    divide(inputTxt, marks, _marks);
-    size_t i = 0;
-    const std::wregex blankPos(L"([aiueoAIUEOQN])([AIUEOaiueoʦʃʧbcdfghjklmnpqrstvwxyzQ])");
-    for (const auto& ita : sentences)
-    {
-        std::wstring tmpStr;
-        const auto labels = extract_fullcontext(*ojtins, to_byte_string(ita).c_str());
-        for (const auto& it : labels)
-        {
-            std::wsmatch mResult;
-            std::regex_search(it, mResult, ph);
-            std::wstring phoneme = mResult[1].str();
-            if (phoneme == L"sil" || phoneme == L"pau")
-                continue;
-            else
-            {
-                phoneme = std::regex_replace(phoneme, std::wregex(L"cl"), L"Q");
-                tmpStr += phoneme;
-            }
-        }
-        while (std::regex_search(tmpStr, blankPos))
-            tmpStr = std::regex_replace(tmpStr, blankPos, L"$1 $2");
-        *globalStrW += tmpStr;
-        if (i < marks.size())
-            *globalStrW += marks[i++];
-    }
-    return globalStrW->c_str();
-}
-
-std::wregex numReg(L"[0-9\\.]+");
-std::wregex tokenReg(L"[A-Za-z]+");
-
-const wchar_t* ChineseToJapanese(const wchar_t* input)
-{
-    globalStrW->clear();
-    std::wstring text = input;
-    std::wsmatch amatch_results;
-    std::vector<std::wstring> Tokens;
-    uint64_t PHSEQOff = text.find(L"<<<<DURATION>>>>");
-    std::wstring phstr = text.substr(PHSEQOff + 16);
-    text = text.substr(0, PHSEQOff + 1);
-    while (std::regex_search(text, amatch_results, tokenReg))
-    {
-        Tokens.push_back(amatch_results[0].str());
-        text = amatch_results.suffix();
-    }
-    std::vector<double> ph_dur;
-    ph_dur.reserve(Tokens.size());
-
-    while (std::regex_search(phstr, amatch_results, numReg))
-    {
-        ph_dur.push_back(_wtof(amatch_results[0].str().c_str()));
-        phstr = amatch_results.suffix();
-    }
-    std::wstring ph_dur_str;
-    std::wstring ph_seq_str;
-    for (size_t i = 0; i < Tokens.size(); ++i)
-    {
-        if (Tokens[i] == L"ai")
-        {
-            ph_seq_str += L"e ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"E")
-        {
-            ph_seq_str += L"e ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"EN")
-        {
-            ph_seq_str += L"e N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"an")
-        {
-            ph_seq_str += L"a N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"ang")
-        {
-            ph_seq_str += L"a N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"ao")
-        {
-            ph_seq_str += L"a o ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"c")
-        {
-            ph_seq_str += L"ts ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"en")
-        {
-            ph_seq_str += L"e N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"eng")
-        {
-            ph_seq_str += L"e N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"ei")
-        {
-            ph_seq_str += L"e i ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"er")
-        {
-            ph_seq_str += L"e ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"i0")
-        {
-            ph_seq_str += L"i ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"ia")
-        {
-            ph_seq_str += L"i a ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"ian")
-        {
-            ph_seq_str += L"i a N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-        }
-        else if (Tokens[i] == L"iang")
-        {
-            ph_seq_str += L"i a N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-        }
-        else if (Tokens[i] == L"iao")
-        {
-            ph_seq_str += L"i a o ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-        }
-        else if (Tokens[i] == L"ie")
-        {
-            ph_seq_str += L"i e ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"in")
-        {
-            ph_seq_str += L"i N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"ing")
-        {
-            ph_seq_str += L"i N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"iong")
-        {
-            ph_seq_str += L"i o N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-        }
-        else if (Tokens[i] == L"iu")
-        {
-            ph_seq_str += L"i u ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"ir")
-        {
-            ph_seq_str += L"i ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"l")
-        {
-            ph_seq_str += L"r ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"ong")
-        {
-            ph_seq_str += L"o N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"ou")
-        {
-            ph_seq_str += L"o u ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"q")
-        {
-            ph_seq_str += L"ch ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"ua")
-        {
-            ph_seq_str += L"u a ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"uai")
-        {
-            ph_seq_str += L"u a i ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-        }
-        else if (Tokens[i] == L"uan")
-        {
-            ph_seq_str += L"u a N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-        }
-        else if (Tokens[i] == L"uang")
-        {
-            ph_seq_str += L"u a N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-        }
-        else if (Tokens[i] == L"ui")
-        {
-            ph_seq_str += L"u i ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"un")
-        {
-            ph_seq_str += L"u N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"uo")
-        {
-            ph_seq_str += L"u o ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 2) + L' ';
-        }
-        else if (Tokens[i] == L"v")
-        {
-            ph_seq_str += L"i y u ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 3) + L' ';
-        }
-        else if (Tokens[i] == L"van")
-        {
-            ph_seq_str += L"i y u a N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 5) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 5) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 5) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 5) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 5) + L' ';
-        }
-        else if (Tokens[i] == L"ve")
-        {
-            ph_seq_str += L"i y u e ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 4) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 4) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 4) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 4) + L' ';
-        }
-        else if (Tokens[i] == L"vn")
-        {
-            ph_seq_str += L"i y u N ";
-            ph_dur_str += std::to_wstring(ph_dur[i] / 4) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 4) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 4) + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i] / 4) + L' ';
-        }
-        else if (Tokens[i] == L"x")
-        {
-            ph_seq_str += L"sh ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"zh")
-        {
-            ph_seq_str += L"z ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
+			for (const auto& it : InputSeq)
+				_ChineseDict->Search(it, OutRes);
+		}
+		else if (LanguageID == "Japanese")
+		{
+			for (const auto& it : InputSeq)
+				_OpenJTalk->operator()(it, OutRes);
         }
         else
-        {
-            ph_seq_str += Tokens[i] + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-    }
-    *globalStrW = ph_seq_str + L"<<<<DURATION>>>>" + ph_dur_str;
-    return globalStrW->c_str();
-}
+			return nullptr;
+		if (OutRes.empty())
+			return nullptr;
+        OutRes.emplace_back();
+        wcscpy_s(OutRes.back().Phoneme, L"[EOS]");
+		OutRes.back().Tone = INT64_MAX;
+        return OutRes.data();
+	}
 
-const wchar_t* JapaneseToChinese(const wchar_t* input)
+	void* GetExtraInfo() const
+    {
+	    if(_OpenJTalk->_MyData.empty())
+			return nullptr;
+        _OpenJTalk->_MyData.emplace_back();
+        _OpenJTalk->_MyData.back().Phoneme.P_2[0] = L'[';
+		_OpenJTalk->_MyData.back().Phoneme.P_1[0] = L'E';
+		_OpenJTalk->_MyData.back().Phoneme.P0[0] = L'O';
+		_OpenJTalk->_MyData.back().Phoneme.P1[0] = L'S';
+		_OpenJTalk->_MyData.back().Phoneme.P2[0] = L']';
+		
+		return _OpenJTalk->_MyData.data();
+    }
+
+private:
+	std::shared_ptr<OpenJTalk> _OpenJTalk;
+	std::shared_ptr<ChineseDict> _ChineseDict;
+    std::vector<PhonemeAndTone> OutRes;
+};
+
+void* CreateInstance(const wchar_t* Parameter)
 {
-    globalStrW->clear();
-    std::wstring text = input;
-    std::wsmatch amatch_results;
-    std::vector<std::wstring> Tokens;
-    uint64_t PHSEQOff = text.find(L"<<<<DURATION>>>>");
-    std::wstring phstr = text.substr(PHSEQOff + 16);
-    text = text.substr(0, PHSEQOff + 1);
-    text = std::regex_replace(text, std::wregex(L"([kthgdbpnmr])y u"), L"$1 v");
-    text = std::regex_replace(text, std::wregex(L"([kthgdbpnmr])y ([ae])"), L"$1 i$2");
-    text = std::regex_replace(text, std::wregex(L"([kthgdbpnmr])y ([io])"), L"$1 $2");
-    while (std::regex_search(text, amatch_results, tokenReg))
-    {
-        Tokens.push_back(amatch_results[0].str());
-        text = amatch_results.suffix();
-    }
-    std::vector<double> ph_dur;
-    ph_dur.reserve(Tokens.size());
-    while (std::regex_search(phstr, amatch_results, numReg))
-    {
-        ph_dur.push_back(_wtof(amatch_results[0].str().c_str()));
-        phstr = amatch_results.suffix();
-    }
-    std::wstring ph_dur_str;
-    std::wstring ph_seq_str;
-    for (size_t i = 0; i < Tokens.size(); ++i)
-    {
-        if (i < Tokens.size() - 1 && Tokens[i + 1] == L"N")
-        {
-            if (Tokens[i] == L"e")
-                ph_seq_str += L"an ";
-            else if (Tokens[i] == L"ie")
-                ph_seq_str += L"en ";
-            else if (Tokens[i] == L"o")
-                ph_seq_str += L"ong ";
-            else
-                ph_seq_str += Tokens[i] + L"n ";
-            ph_dur_str += std::to_wstring(ph_dur[i] + ph_dur[i + 1]) + L' ';
-            ++i;
-        }
-        else if (Tokens[i] == L"I")
-        {
-            ph_seq_str += L"i ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"U")
-        {
-            ph_seq_str += L"u ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"br")
-        {
-            continue;
-        }
-        else if (Tokens[i] == L"cl")
-        {
-            continue;
-        }
-        else if (Tokens[i] == L"U")
-        {
-            ph_seq_str += L"u ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"v")
-        {
-            ph_seq_str += L"w ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i] == L"e")
-        {
-            ph_seq_str += L"ai ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else if (Tokens[i].length() == 2)
-        {
-            if (Tokens[i] == L"ts")
-            {
-                ph_seq_str += L"c ";
-                ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-            }
-            else if (Tokens[i] == L"sh" && Tokens[i + 1] == L"i")
-            {
-                ph_seq_str += L"x ";
-                ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-            }
-            else if (Tokens[i] == L"ch" && Tokens[i + 1] == L"i")
-            {
-                ph_seq_str += L"q ";
-                ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-            }
-            else
-            {
-                ph_seq_str += Tokens[i] + L' ';
-                ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-            }
-        }
-        else if (Tokens[i] == L"r")
-        {
-            ph_seq_str += L"l ";
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-        else
-        {
-            ph_seq_str += Tokens[i] + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-    }
-    Tokens.clear();
-    text = ph_seq_str;
-    while (std::regex_search(text, amatch_results, tokenReg))
-    {
-        Tokens.push_back(amatch_results[0]);
-        text = amatch_results.suffix();
-    }
-    ph_dur.clear();
-    ph_dur.reserve(Tokens.size());
-    phstr = ph_dur_str;
-    while (std::regex_search(phstr, amatch_results, numReg))
-    {
-        ph_dur.push_back(_wtof(amatch_results[0].str().c_str()));
-        phstr = amatch_results.suffix();
-    }
-    ph_seq_str.clear();
-    ph_dur_str.clear();
-    for (size_t i = 0; i < Tokens.size(); ++i)
-    {
-        if (i < Tokens.size() - 1)
-        {
-            if (Tokens[i] == Tokens[i + 1])
-            {
-                ph_seq_str += Tokens[i] + L' ';
-                ph_dur_str += std::to_wstring(ph_dur[i] + ph_dur[i + 1]) + L' ';
-                ++i;
-            }
-            else if (Tokens[i].length() == 2 && Tokens[i][1] == Tokens[i + 1][0])
-            {
-                ph_seq_str += Tokens[i] + L' ';
-                ph_dur_str += std::to_wstring(ph_dur[i] + ph_dur[i + 1]) + L' ';
-                ++i;
-            }
-            else if (Tokens[i] == L"i" && (Tokens[i + 1] == L"a" || Tokens[i + 1] == L"e" || Tokens[i + 1] == L"u"))
-            {
-                ph_seq_str += Tokens[i] + L' ';
-                ph_dur_str += std::to_wstring(ph_dur[i] + ph_dur[i + 1]) + L' ';
-                ++i;
-            }
-            else
-            {
-                ph_seq_str += Tokens[i] + L' ';
-                ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-            }
-        }
-        else
-        {
-            ph_seq_str += Tokens[i] + L' ';
-            ph_dur_str += std::to_wstring(ph_dur[i]) + L' ';
-        }
-    }
-    *globalStrW = ph_seq_str + L"<<<<DURATION>>>>" + ph_dur_str;
-    return globalStrW->c_str();
+	return new Instance(Parameter);
 }
- */
+void DestoryInstance(void* _Instance)
+{
+    delete static_cast<Instance*>(_Instance);
+}
+void* Convert(void* _Instance, const wchar_t* InputText, const char* LanguageID, const void*)
+{
+	return static_cast<Instance*>(_Instance)->Convert(InputText, LanguageID, nullptr);
+}
+void* GetExtraInfo(void* _Instance)
+{
+	return static_cast<Instance*>(_Instance)->GetExtraInfo();
+}
 
 BOOL APIENTRY DllMain( HMODULE hModule,
                        DWORD  ul_reason_for_call,
                        LPVOID lpReserved
                      )
 {
-    switch (ul_reason_for_call)
-    {
-    case DLL_PROCESS_ATTACH:
-    {
-        break;
-    }
-    case DLL_THREAD_ATTACH:
-    {
-        break;
-    }
-    case DLL_THREAD_DETACH:
-    {
-        //_CleanedData.refresh();
-        break;
-    }
-    case DLL_PROCESS_DETACH:
-        ReleaseOjt();
-        break;
-    }
     return TRUE;
 }
 
