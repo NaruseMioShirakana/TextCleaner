@@ -25,7 +25,7 @@
 
 std::wstring ChineseNumber[] = { L"零",L"一",L"二",L"三",L"四",L"五",L"六",L"七",L"八",L"九",L"十" };
 std::wstring ChineseNumberDigit[] = { L"",L"十",L"百",L"千",L"万",L"十万",L"百万",L"千万",L"亿" };
-std::vector<std::pair<std::wstring, std::wstring>> _CURRENCY_MAP{{L"\\$", L"ドル"}, { L"¥", L"円" }, { L"£", L"ポンド" }, { L"€", L"ユーロ" }};
+std::vector<std::pair<std::wstring, std::wstring>> _CURRENCY_MAP{ {L"\\$", L"ドル"}, { L"¥", L"円" }, { L"£", L"ポンド" }, { L"€", L"ユーロ" } };
 std::wregex NumberRegex(L"\\d+(?:\\.?\\d+)?");
 std::wregex SignRegex(L"[!@#$%^&*()_+\\-=`~,./;'\\[\\]<>?:\"{}|\\\\。？！，、；：“”‘’『』「」（）〔〕【】─…·—～《》〈〉　]+");
 std::wregex SignRegexSingle(L"[!@#$%^&*()_+\\-=`~,./;'\\[\\]<>?:\"{}|\\\\。？！，、；：“”‘’『』「」（）〔〕【】─…·—～《》〈〉　]");
@@ -82,22 +82,22 @@ static const std::wregex _KInfoGroupRegex{ LR"(/K:(.*?)\+(.*?)\-(.*?))" };
 
 struct PhonemeAndTone
 {
-	wchar_t Phoneme[8];
-	int64_t Tone;
+    wchar_t Phoneme[8];
+    int64_t Tone;
 };
 
 std::vector<std::wstring> SplitString(
-    const std::wstring& _Input, 
-    const std::wregex& _Regex, 
+    const std::wstring& _Input,
+    const std::wregex& _Regex,
     const std::initializer_list<int>& _Sub = { -1 }
 )
 {
-	std::vector<std::wstring> RtnVec;
-	std::wsregex_token_iterator Iter(_Input.begin(), _Input.end(), _Regex, _Sub);
-	std::wsregex_token_iterator End;
-	for (; Iter != End; ++Iter)
-		RtnVec.emplace_back(Iter->str());
-	return RtnVec;
+    std::vector<std::wstring> RtnVec;
+    std::wsregex_token_iterator Iter(_Input.begin(), _Input.end(), _Regex, _Sub);
+    std::wsregex_token_iterator End;
+    for (; Iter != End; ++Iter)
+        RtnVec.emplace_back(Iter->str());
+    return RtnVec;
 }
 
 std::wstring NumberToChinese(double Number)
@@ -221,20 +221,20 @@ std::wstring to_wide_string(const std::string& input)
 class OpenJTalk
 {
 public:
-	friend class Instance;
-	friend class std::shared_ptr<OpenJTalk>;
+    friend class Instance;
+    friend class std::shared_ptr<OpenJTalk>;
     struct _MyPhoneme { wchar_t P_2[8]; wchar_t P_1[8]; wchar_t P0[8]; wchar_t P1[8]; wchar_t P2[8]; };
     struct _MyA { int8_t A1; uint8_t A2; uint8_t A3; };
     struct _MyB { wchar_t B1[8]; wchar_t B2[8]; wchar_t B3[8]; };
-	struct _MyC { wchar_t C1[8]; wchar_t C2[8]; wchar_t C3[8]; };
-	struct _MyD { wchar_t D1[8]; wchar_t D2[8]; wchar_t D3[8]; };
-	struct _MyE { uint8_t E1; uint8_t E2; bool E3; wchar_t E4[8]; bool E5; };
-	struct _MyF { uint8_t F1; uint8_t F2; bool F3; wchar_t F4[8]; uint8_t F5; uint8_t F6; uint8_t F7; uint8_t F8; };
-	struct _MyG { uint8_t G1; uint8_t G2; bool G3; wchar_t G4[8]; bool G5; };
-	struct _MyH { uint8_t H1; uint8_t H2; };
-	struct _MyI { uint8_t I1; uint8_t I2; uint8_t I3; uint8_t I4; uint8_t I5; uint8_t I6; uint8_t I7; uint8_t I8; };
-	struct _MyJ { uint8_t J1; uint8_t J2; };
-	struct _MyK { uint8_t K1; uint8_t K2; uint8_t K3; };
+    struct _MyC { wchar_t C1[8]; wchar_t C2[8]; wchar_t C3[8]; };
+    struct _MyD { wchar_t D1[8]; wchar_t D2[8]; wchar_t D3[8]; };
+    struct _MyE { uint8_t E1; uint8_t E2; bool E3; wchar_t E4[8]; bool E5; };
+    struct _MyF { uint8_t F1; uint8_t F2; bool F3; wchar_t F4[8]; uint8_t F5; uint8_t F6; uint8_t F7; uint8_t F8; };
+    struct _MyG { uint8_t G1; uint8_t G2; bool G3; wchar_t G4[8]; bool G5; };
+    struct _MyH { uint8_t H1; uint8_t H2; };
+    struct _MyI { uint8_t I1; uint8_t I2; uint8_t I3; uint8_t I4; uint8_t I5; uint8_t I6; uint8_t I7; uint8_t I8; };
+    struct _MyJ { uint8_t J1; uint8_t J2; };
+    struct _MyK { uint8_t K1; uint8_t K2; uint8_t K3; };
     struct FullContext
     {
         _MyPhoneme Phoneme;
@@ -278,100 +278,100 @@ public:
     }
     static FullContext Extract(const std::wstring& _Context)
     {
-		FullContext _TmpContext{};
+        FullContext _TmpContext{};
         std::wsmatch Matched;
-		if (std::regex_search(_Context, Matched, _PhonemeInfoRegex))
-		{
-			wcscpy_s(_TmpContext.Phoneme.P_2, Matched[1].str().c_str());
-			wcscpy_s(_TmpContext.Phoneme.P_1, Matched[2].str().c_str());
-			wcscpy_s(_TmpContext.Phoneme.P0, Matched[3].str().c_str());
-			wcscpy_s(_TmpContext.Phoneme.P1, Matched[4].str().c_str());
-			wcscpy_s(_TmpContext.Phoneme.P2, Matched[5].str().c_str());
-		}
-		if (std::regex_search(_Context, Matched, _AInfoGroupRegex))
-		{
-			_TmpContext.A.A1 = int8_t(_Impl_To_Int(Matched[1].str()));
-			_TmpContext.A.A2 = uint8_t(_Impl_To_Int(Matched[2].str()));
-			_TmpContext.A.A3 = uint8_t(_Impl_To_Int(Matched[3].str()));
-		}
+        if (std::regex_search(_Context, Matched, _PhonemeInfoRegex))
+        {
+            wcscpy_s(_TmpContext.Phoneme.P_2, Matched[1].str().c_str());
+            wcscpy_s(_TmpContext.Phoneme.P_1, Matched[2].str().c_str());
+            wcscpy_s(_TmpContext.Phoneme.P0, Matched[3].str().c_str());
+            wcscpy_s(_TmpContext.Phoneme.P1, Matched[4].str().c_str());
+            wcscpy_s(_TmpContext.Phoneme.P2, Matched[5].str().c_str());
+        }
+        if (std::regex_search(_Context, Matched, _AInfoGroupRegex))
+        {
+            _TmpContext.A.A1 = int8_t(_Impl_To_Int(Matched[1].str()));
+            _TmpContext.A.A2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+            _TmpContext.A.A3 = uint8_t(_Impl_To_Int(Matched[3].str()));
+        }
         if (std::regex_search(_Context, Matched, _BInfoGroupRegex))
         {
             wcscpy_s(_TmpContext.B.B1, Matched[1].str().c_str());
-			wcscpy_s(_TmpContext.B.B2, Matched[2].str().c_str());
-			wcscpy_s(_TmpContext.B.B3, Matched[3].str().c_str());
+            wcscpy_s(_TmpContext.B.B2, Matched[2].str().c_str());
+            wcscpy_s(_TmpContext.B.B3, Matched[3].str().c_str());
         }
         if (std::regex_search(_Context, Matched, _CInfoGroupRegex))
         {
             wcscpy_s(_TmpContext.C.C1, Matched[1].str().c_str());
-			wcscpy_s(_TmpContext.C.C2, Matched[2].str().c_str());
-			wcscpy_s(_TmpContext.C.C3, Matched[3].str().c_str());
+            wcscpy_s(_TmpContext.C.C2, Matched[2].str().c_str());
+            wcscpy_s(_TmpContext.C.C3, Matched[3].str().c_str());
         }
-		if (std::regex_search(_Context, Matched, _DInfoGroupRegex))
-		{
-			wcscpy_s(_TmpContext.D.D1, Matched[1].str().c_str());
-			wcscpy_s(_TmpContext.D.D2, Matched[2].str().c_str());
-			wcscpy_s(_TmpContext.D.D3, Matched[3].str().c_str());
-		}
-		if (std::regex_search(_Context, Matched, _EInfoGroupRegex))
-		{
-			_TmpContext.E.E1 = uint8_t(_Impl_To_Int(Matched[1].str()));
-			_TmpContext.E.E2 = uint8_t(_Impl_To_Int(Matched[2].str()));
-			_TmpContext.E.E3 = _Impl_To_Int(Matched[3].str());
-			wcscpy_s(_TmpContext.E.E4, Matched[4].str().c_str());
-			_TmpContext.E.E5 = _Impl_To_Int(Matched[5].str());
-		}
-		if (std::regex_search(_Context, Matched, _FInfoGroupRegex))
-		{
-			_TmpContext.F.F1 = uint8_t(_Impl_To_Int(Matched[1].str()));
-			_TmpContext.F.F2 = uint8_t(_Impl_To_Int(Matched[2].str()));
-			_TmpContext.F.F3 = _Impl_To_Int(Matched[3].str());
-			wcscpy_s(_TmpContext.F.F4, Matched[4].str().c_str());
-			_TmpContext.F.F5 = uint8_t(_Impl_To_Int(Matched[5].str()));
-			_TmpContext.F.F6 = uint8_t(_Impl_To_Int(Matched[6].str()));
-			_TmpContext.F.F7 = uint8_t(_Impl_To_Int(Matched[7].str()));
-			_TmpContext.F.F8 = uint8_t(_Impl_To_Int(Matched[8].str()));
-		}
-		if (std::regex_search(_Context, Matched, _GInfoGroupRegex))
-		{
-			_TmpContext.G.G1 = uint8_t(_Impl_To_Int(Matched[1].str()));
-			_TmpContext.G.G2 = uint8_t(_Impl_To_Int(Matched[2].str()));
-			_TmpContext.G.G3 = _Impl_To_Int(Matched[3].str());
-			wcscpy_s(_TmpContext.G.G4, Matched[4].str().c_str());
-			_TmpContext.G.G5 = _Impl_To_Int(Matched[5].str());
-		}
-		if (std::regex_search(_Context, Matched, _HInfoGroupRegex))
-		{
-			_TmpContext.H.H1 = uint8_t(_Impl_To_Int(Matched[1].str()));
-			_TmpContext.H.H2 = uint8_t(_Impl_To_Int(Matched[2].str()));
-		}
-		if (std::regex_search(_Context, Matched, _IInfoGroupRegex))
-		{
-			_TmpContext.I.I1 = uint8_t(_Impl_To_Int(Matched[1].str()));
-			_TmpContext.I.I2 = uint8_t(_Impl_To_Int(Matched[2].str()));
-			_TmpContext.I.I3 = uint8_t(_Impl_To_Int(Matched[3].str()));
-			_TmpContext.I.I4 = uint8_t(_Impl_To_Int(Matched[4].str()));
-			_TmpContext.I.I5 = uint8_t(_Impl_To_Int(Matched[5].str()));
-			_TmpContext.I.I6 = uint8_t(_Impl_To_Int(Matched[6].str()));
-			_TmpContext.I.I7 = uint8_t(_Impl_To_Int(Matched[7].str()));
-			_TmpContext.I.I8 = uint8_t(_Impl_To_Int(Matched[8].str()));
-		}
+        if (std::regex_search(_Context, Matched, _DInfoGroupRegex))
+        {
+            wcscpy_s(_TmpContext.D.D1, Matched[1].str().c_str());
+            wcscpy_s(_TmpContext.D.D2, Matched[2].str().c_str());
+            wcscpy_s(_TmpContext.D.D3, Matched[3].str().c_str());
+        }
+        if (std::regex_search(_Context, Matched, _EInfoGroupRegex))
+        {
+            _TmpContext.E.E1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+            _TmpContext.E.E2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+            _TmpContext.E.E3 = _Impl_To_Int(Matched[3].str());
+            wcscpy_s(_TmpContext.E.E4, Matched[4].str().c_str());
+            _TmpContext.E.E5 = _Impl_To_Int(Matched[5].str());
+        }
+        if (std::regex_search(_Context, Matched, _FInfoGroupRegex))
+        {
+            _TmpContext.F.F1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+            _TmpContext.F.F2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+            _TmpContext.F.F3 = _Impl_To_Int(Matched[3].str());
+            wcscpy_s(_TmpContext.F.F4, Matched[4].str().c_str());
+            _TmpContext.F.F5 = uint8_t(_Impl_To_Int(Matched[5].str()));
+            _TmpContext.F.F6 = uint8_t(_Impl_To_Int(Matched[6].str()));
+            _TmpContext.F.F7 = uint8_t(_Impl_To_Int(Matched[7].str()));
+            _TmpContext.F.F8 = uint8_t(_Impl_To_Int(Matched[8].str()));
+        }
+        if (std::regex_search(_Context, Matched, _GInfoGroupRegex))
+        {
+            _TmpContext.G.G1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+            _TmpContext.G.G2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+            _TmpContext.G.G3 = _Impl_To_Int(Matched[3].str());
+            wcscpy_s(_TmpContext.G.G4, Matched[4].str().c_str());
+            _TmpContext.G.G5 = _Impl_To_Int(Matched[5].str());
+        }
+        if (std::regex_search(_Context, Matched, _HInfoGroupRegex))
+        {
+            _TmpContext.H.H1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+            _TmpContext.H.H2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+        }
+        if (std::regex_search(_Context, Matched, _IInfoGroupRegex))
+        {
+            _TmpContext.I.I1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+            _TmpContext.I.I2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+            _TmpContext.I.I3 = uint8_t(_Impl_To_Int(Matched[3].str()));
+            _TmpContext.I.I4 = uint8_t(_Impl_To_Int(Matched[4].str()));
+            _TmpContext.I.I5 = uint8_t(_Impl_To_Int(Matched[5].str()));
+            _TmpContext.I.I6 = uint8_t(_Impl_To_Int(Matched[6].str()));
+            _TmpContext.I.I7 = uint8_t(_Impl_To_Int(Matched[7].str()));
+            _TmpContext.I.I8 = uint8_t(_Impl_To_Int(Matched[8].str()));
+        }
         if (std::regex_search(_Context, Matched, _JInfoGroupRegex))
-		{
-			_TmpContext.J.J1 = uint8_t(_Impl_To_Int(Matched[1].str()));
-			_TmpContext.J.J2 = uint8_t(_Impl_To_Int(Matched[2].str()));
-		}
-		if (std::regex_search(_Context, Matched, _KInfoGroupRegex))
-		{
-			_TmpContext.K.K1 = uint8_t(_Impl_To_Int(Matched[1].str()));
-			_TmpContext.K.K2 = uint8_t(_Impl_To_Int(Matched[2].str()));
-			_TmpContext.K.K3 = uint8_t(_Impl_To_Int(Matched[3].str()));
-		}
-		return _TmpContext;
-	}
+        {
+            _TmpContext.J.J1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+            _TmpContext.J.J2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+        }
+        if (std::regex_search(_Context, Matched, _KInfoGroupRegex))
+        {
+            _TmpContext.K.K1 = uint8_t(_Impl_To_Int(Matched[1].str()));
+            _TmpContext.K.K2 = uint8_t(_Impl_To_Int(Matched[2].str()));
+            _TmpContext.K.K3 = uint8_t(_Impl_To_Int(Matched[3].str()));
+        }
+        return _TmpContext;
+    }
     void ExtractFullContext(const wchar_t* _InputText)
     {
-		_MyData.clear();
-		const auto Text = to_byte_string(_InputText);
+        _MyData.clear();
+        const auto Text = to_byte_string(_InputText);
         char Buffer[1024 * 8];
         text2mecab(Buffer, Text.c_str());
         Mecab_analysis(mecab, Buffer);
@@ -386,23 +386,23 @@ public:
         JPCommon_make_label(jpcommon);
         const int label_size = JPCommon_get_label_size(jpcommon);
         char** label_feature = JPCommon_get_label_feature(jpcommon);
-		_MyData.reserve(label_size);
+        _MyData.reserve(label_size);
         for (int i = 0; i < label_size; i++)
-			_MyData.emplace_back(Extract(to_wide_string(label_feature[i])));
+            _MyData.emplace_back(Extract(to_wide_string(label_feature[i])));
         Refresh();
     }
     void operator()(std::wstring InputSeq, std::vector<PhonemeAndTone>& OutRes)
     {
         for (const auto& it : _DefaultJapaneseReplaceRegexDict)
             InputSeq = std::regex_replace(InputSeq, it.first, it.second);
-		ExtractFullContext(InputSeq.c_str());
-		for (size_t Index = 0; Index < _MyData.size(); ++Index)
-		{
-			const auto& This = _MyData[Index];
+        ExtractFullContext(InputSeq.c_str());
+        for (size_t Index = 0; Index < _MyData.size(); ++Index)
+        {
+            const auto& This = _MyData[Index];
             OutRes.emplace_back();
-			wcscpy_s(OutRes.back().Phoneme, This.Phoneme.P0);
+            wcscpy_s(OutRes.back().Phoneme, This.Phoneme.P0);
             if (wcscmp(This.Phoneme.P0, L"sil") == 0 || wcscmp(This.Phoneme.P0, L"pau") == 0)
-	            continue;
+                continue;
 
             const auto& Next = _MyData[Index + 1];
             int Next2;
@@ -412,15 +412,15 @@ public:
                 Next2 = Next.A.A2;
             if (This.A.A3 == 1 && Next2 == 1)
             {
-				OutRes.emplace_back();
-				OutRes.back().Phoneme[0] = L' ';
-				OutRes.back().Tone = 0;
+                OutRes.emplace_back();
+                OutRes.back().Phoneme[0] = L' ';
+                OutRes.back().Tone = 0;
             }
             else if (This.A.A1 == 0 && Next2 == This.A.A2 + 1 && This.A.A2 != This.F.F1)
                 OutRes.back().Tone = -1;
             else if (This.A.A3 == 1 && Next2 == 1)
                 OutRes.back().Tone = 1;
-		}
+        }
     }
 protected:
     std::vector<FullContext> _MyData;
@@ -439,7 +439,7 @@ class ChineseDict
 {
 public:
     friend class Instance;
-	friend class std::shared_ptr<ChineseDict>;
+    friend class std::shared_ptr<ChineseDict>;
     ChineseDict() = delete;
     void Search(std::wstring InputSeq, std::vector<PhonemeAndTone>& OutRes) {
         InputSeq = ChineseNormalize(InputSeq);
@@ -449,9 +449,9 @@ public:
             std::wsregex_token_iterator End;
             for (; Iter != End; ++Iter)
             {
-	            OutRes.emplace_back();
+                OutRes.emplace_back();
                 wcscpy_s(OutRes.back().Phoneme, Iter->str().c_str());
-				OutRes.back().Tone = 0;
+                OutRes.back().Tone = 0;
             }
             return;
         }
@@ -464,16 +464,16 @@ public:
                 {
                     for (size_t i = 0; i < SearchResult->second.Phone.size(); ++i)
                     {
-	                    OutRes.emplace_back();
-						wcscpy_s(OutRes.back().Phoneme, SearchResult->second.Phone[i].c_str());
-						OutRes.back().Tone = static_cast<int64_t>((uint8_t)SearchResult->second.Tone[i]);
+                        OutRes.emplace_back();
+                        wcscpy_s(OutRes.back().Phoneme, SearchResult->second.Phone[i].c_str());
+                        OutRes.back().Tone = static_cast<int64_t>((uint8_t)SearchResult->second.Tone[i]);
                     }
                     InputSeq = InputSeq.substr(SearchLength);
                     break;
                 }
                 if (SearchLength == 1)
                 {
-					OutRes.emplace_back();
+                    OutRes.emplace_back();
                     wcscpy_s(OutRes.back().Phoneme, L"[UNK]");
                     InputSeq = InputSeq.substr(1);
                 }
@@ -575,66 +575,66 @@ void replaceSymbol(std::wstring& tmpStr)
 class Instance
 {
 public:
-	Instance() = delete;
+    Instance() = delete;
     Instance(const wchar_t* _Path)
     {
-		auto OjtPath = _Path + std::wstring(L"/Japanese");
-		auto ChinsesDictPath = _Path + std::wstring(L"/Chinese/dict.json");
+        auto OjtPath = _Path + std::wstring(L"/Japanese");
+        auto ChinsesDictPath = _Path + std::wstring(L"/Chinese/dict.json");
         _OpenJTalk = std::make_shared<OpenJTalk>(to_byte_string(OjtPath).c_str());
         _ChineseDict = std::make_shared<ChineseDict>(to_byte_string(ChinsesDictPath).c_str());
     }
 
-	void* Convert(
+    void* Convert(
         const std::wstring& InputText,
         const std::string& LanguageID,
         const void*
     )
-	{
+    {
         OutRes.clear();
         auto InputSeq = SplitString(InputText, std::wregex(LR"([\r\n])"));
         if (LanguageID == "Chinese")
         {
-			for (const auto& it : InputSeq)
-				_ChineseDict->Search(it, OutRes);
-		}
-		else if (LanguageID == "Japanese")
-		{
-			for (const auto& it : InputSeq)
-				_OpenJTalk->operator()(it, OutRes);
+            for (const auto& it : InputSeq)
+                _ChineseDict->Search(it, OutRes);
+        }
+        else if (LanguageID == "Japanese")
+        {
+            for (const auto& it : InputSeq)
+                _OpenJTalk->operator()(it, OutRes);
         }
         else
-			return nullptr;
-		if (OutRes.empty())
-			return nullptr;
+            return nullptr;
+        if (OutRes.empty())
+            return nullptr;
         OutRes.emplace_back();
         wcscpy_s(OutRes.back().Phoneme, L"[EOS]");
-		OutRes.back().Tone = INT64_MAX;
+        OutRes.back().Tone = INT64_MAX;
         return OutRes.data();
-	}
+    }
 
-	void* GetExtraInfo() const
+    void* GetExtraInfo() const
     {
-	    if(_OpenJTalk->_MyData.empty())
-			return nullptr;
+        if (_OpenJTalk->_MyData.empty())
+            return nullptr;
         _OpenJTalk->_MyData.emplace_back();
         _OpenJTalk->_MyData.back().Phoneme.P_2[0] = L'[';
-		_OpenJTalk->_MyData.back().Phoneme.P_1[0] = L'E';
-		_OpenJTalk->_MyData.back().Phoneme.P0[0] = L'O';
-		_OpenJTalk->_MyData.back().Phoneme.P1[0] = L'S';
-		_OpenJTalk->_MyData.back().Phoneme.P2[0] = L']';
-		
-		return _OpenJTalk->_MyData.data();
+        _OpenJTalk->_MyData.back().Phoneme.P_1[0] = L'E';
+        _OpenJTalk->_MyData.back().Phoneme.P0[0] = L'O';
+        _OpenJTalk->_MyData.back().Phoneme.P1[0] = L'S';
+        _OpenJTalk->_MyData.back().Phoneme.P2[0] = L']';
+
+        return _OpenJTalk->_MyData.data();
     }
 
 private:
-	std::shared_ptr<OpenJTalk> _OpenJTalk;
-	std::shared_ptr<ChineseDict> _ChineseDict;
+    std::shared_ptr<OpenJTalk> _OpenJTalk;
+    std::shared_ptr<ChineseDict> _ChineseDict;
     std::vector<PhonemeAndTone> OutRes;
 };
 
 void* CreateInstance(const wchar_t* Parameter)
 {
-	return new Instance(Parameter);
+    return new Instance(Parameter);
 }
 void DestoryInstance(void* _Instance)
 {
@@ -642,17 +642,17 @@ void DestoryInstance(void* _Instance)
 }
 void* Convert(void* _Instance, const wchar_t* InputText, const char* LanguageID, const void*)
 {
-	return static_cast<Instance*>(_Instance)->Convert(InputText, LanguageID, nullptr);
+    return static_cast<Instance*>(_Instance)->Convert(InputText, LanguageID, nullptr);
 }
 void* GetExtraInfo(void* _Instance)
 {
-	return static_cast<Instance*>(_Instance)->GetExtraInfo();
+    return static_cast<Instance*>(_Instance)->GetExtraInfo();
 }
 
-BOOL APIENTRY DllMain( HMODULE hModule,
-                       DWORD  ul_reason_for_call,
-                       LPVOID lpReserved
-                     )
+BOOL APIENTRY DllMain(HMODULE hModule,
+    DWORD  ul_reason_for_call,
+    LPVOID lpReserved
+)
 {
     return TRUE;
 }
