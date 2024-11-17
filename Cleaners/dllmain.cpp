@@ -17,11 +17,14 @@
 #include "openjtalk\\open_jtalk-1.11\\src\\njd2jpcommon\\njd2jpcommon.h"
 #include <codecvt>
 #include <regex>
-#include <atomic>
+#include <deque>
+
 #include "MJson/MJson.h"
 #pragma comment(lib, "openjtalk\\openjtalk.lib")
 #pragma comment(lib, "openjtalk\\hts_engine_API.lib")
 #pragma comment(lib, "openjtalk\\hts_engine.lib")
+#undef max
+#undef min
 
 std::wstring ChineseNumber[] = { L"零",L"一",L"二",L"三",L"四",L"五",L"六",L"七",L"八",L"九",L"十" };
 std::wstring ChineseNumberDigit[] = { L"",L"十",L"百",L"千",L"万",L"十万",L"百万",L"千万",L"亿" };
@@ -84,6 +87,17 @@ struct PhonemeAndTone
 {
     wchar_t Phoneme[8];
     int64_t Tone;
+	void SetPhoneme(const wchar_t* _Phoneme) { wcscpy_s(Phoneme, _Phoneme); }
+	bool operator==(const PhonemeAndTone& right) const
+	{
+		return wcscmp(Phoneme, right.Phoneme) == 0 && Tone == right.Tone;
+	}
+	bool operator==(const wchar_t* right) const
+	{
+		return wcscmp(Phoneme, right) == 0;
+	}
+    PhonemeAndTone(const wchar_t* _Phoneme, int64_t _Tone) : Tone(_Tone) { wcscpy_s(Phoneme, _Phoneme); }
+	operator wchar_t* () { return Phoneme; }
 };
 
 std::vector<std::wstring> SplitString(
@@ -241,6 +255,11 @@ public:
         _MyA A; _MyB B; _MyC C; _MyD D; _MyE E;
         _MyF F; _MyG G; _MyH H; _MyI I; _MyJ J;
         _MyK K;
+        bool operator==(const wchar_t* right) const
+        {
+            return wcscmp(Phoneme.P0, right) == 0;
+        }
+		operator const wchar_t* () const { return Phoneme.P0; }
     };
     OpenJTalk(const char* folder)
     {
@@ -391,39 +410,129 @@ public:
             _MyData.emplace_back(Extract(to_wide_string(label_feature[i])));
         Refresh();
     }
-    void operator()(std::wstring InputSeq, std::vector<PhonemeAndTone>& OutRes)
+
+    void operator()(std::wstring InputSeq, std::vector<PhonemeAndTone>& OutRes, bool DropUnVoice)
     {
+        std::deque<std::vector<std::wstring>> Sign;
+        {
+            auto Temp = SplitString(InputSeq, SignRegex, { 0 });
+            for (const auto& i : Temp)
+                if (!i.empty())
+                    Sign.emplace_back(SplitString(i, SignRegexSingle, { 0 }));
+        }
+
         for (const auto& it : _DefaultJapaneseReplaceRegexDict)
             InputSeq = std::regex_replace(InputSeq, it.first, it.second);
-        ExtractFullContext(InputSeq.c_str());
-        for (size_t Index = 0; Index < _MyData.size(); ++Index)
-        {
-            const auto& This = _MyData[Index];
-            OutRes.emplace_back();
-            wcscpy_s(OutRes.back().Phoneme, This.Phoneme.P0);
-            if (wcscmp(This.Phoneme.P0, L"sil") == 0 || wcscmp(This.Phoneme.P0, L"pau") == 0)
-                continue;
+		for (const auto& it : _CURRENCY_MAP)
+			InputSeq = std::regex_replace(InputSeq, std::wregex(it.first), it.second);
 
-            const auto& Next = _MyData[Index + 1];
-            int Next2;
-            if (wcscmp(Next.Phoneme.P0, L"sil") == 0 || wcscmp(Next.Phoneme.P0, L"pau") == 0)
-                Next2 = -1;
-            else
-                Next2 = Next.A.A2;
-            if (This.A.A3 == 1 && Next2 == 1)
+        ExtractFullContext(InputSeq.c_str());
+		OutRes.reserve(_MyData.size() * 2);
+		// Sil(CLS)
+        if (!DropUnVoice)
+            OutRes.emplace_back(L"[CLS]", 0);
+
+		std::wsmatch Matched;
+		
+        if (regex_search(InputSeq, Matched, SignRegex) && Matched.position() == 0)
+		{
+			for (const auto& i : Sign.front())
+				OutRes.emplace_back(i.c_str(), 0);
+			Sign.pop_front();
+		}
+
+        int64_t CurrentTone = 0;
+        std::vector<PhonemeAndTone> CurrentPhrase;
+        auto CorrectAndInsert = [&]()
             {
-                OutRes.emplace_back();
-                OutRes.back().Phoneme[0] = L' ';
-                OutRes.back().Tone = 0;
+                if (!CurrentPhrase.empty())
+                {
+                    bool NeedCorrect = false;
+                    for (auto i : CurrentPhrase)
+                        if (i.Tone < 0)
+                        {
+                            NeedCorrect = true;
+                            break;
+                        }
+                    if (NeedCorrect)
+                    {
+                        for (auto& i : CurrentPhrase)
+                            i.Tone += 1;
+                    }
+                    OutRes.insert(OutRes.end(), CurrentPhrase.begin(), CurrentPhrase.end());
+                }
+                CurrentTone = 0;
+                CurrentPhrase.clear();
+            };
+
+        // Seq
+        for (size_t Index = 1; Index < _MyData.size() - 1; ++Index)
+        {
+            const auto& CurrentLabel = _MyData[Index];
+            const auto& NextLabel = _MyData[Index + 1];
+            const auto SharpCondition = CurrentLabel.A.A3 == 1 && NextLabel.A.A2 == 1 && _MyVowel.find(CurrentLabel) != std::wstring::npos;
+			const auto LowerCondition = CurrentLabel.A.A1 == 0 && NextLabel.A.A2 == CurrentLabel.A.A2 + 1 && CurrentLabel.A.A2 != CurrentLabel.F.F1;
+			const auto UpperCondition = CurrentLabel.A.A2 == 1 && NextLabel.A.A2 == 2;
+
+            if (CurrentLabel == L"sil" || CurrentLabel == L"pau" || SharpCondition)
+            {
+                if(SharpCondition)
+                    CurrentPhrase.emplace_back(CurrentLabel, CurrentTone);
+				CorrectAndInsert();
+                if (CurrentLabel == L"pau" && !Sign.empty())
+                {
+                    for (const auto& i : Sign.front())
+                        OutRes.emplace_back(i.c_str(), OutRes.back().Tone);
+                    Sign.pop_front();
+                }
+                if (!DropUnVoice)
+                {
+                    if (CurrentLabel == L"pau")
+                    	OutRes.emplace_back(L"[PAD]", 0);
+                    else if (SharpCondition)
+                        OutRes.emplace_back(L"[SHARP]", 0);
+                }
             }
-            else if (This.A.A1 == 0 && Next2 == This.A.A2 + 1 && This.A.A2 != This.F.F1)
-                OutRes.back().Tone = -1;
-            else if (This.A.A3 == 1 && Next2 == 1)
-                OutRes.back().Tone = 1;
+			else if (LowerCondition)
+            {
+                CurrentPhrase.emplace_back(CurrentLabel, CurrentTone);
+                CurrentTone -= 1;
+                if (!DropUnVoice)
+                    CurrentPhrase.emplace_back(L"[LOWER]", std::min(std::max(CurrentTone, 0ll), 1ll));
+            }
+			else if (UpperCondition)
+            {
+                CurrentPhrase.emplace_back(CurrentLabel, CurrentTone);
+                CurrentTone += 1;
+                if (!DropUnVoice)
+                    CurrentPhrase.emplace_back(L"[UPPER]", std::min(std::max(CurrentTone, 0ll), 1ll));
+            }
+            else
+                CurrentPhrase.emplace_back(CurrentLabel, CurrentTone);
         }
+
+        // Sil(SEP)
+	    {
+		    CorrectAndInsert();
+            if (!Sign.empty())
+            {
+	            for (const auto& i : Sign.front())
+	            	OutRes.emplace_back(i.c_str(), OutRes.back().Tone);
+                Sign.pop_front();
+            }
+
+        	if (!DropUnVoice)
+        	{
+        		if (_MyData.back().E.E3)
+        			OutRes.emplace_back(L"[SEP?]", 0);
+        		else
+        			OutRes.emplace_back(L"[SEP$]", 0);
+        	}
+	    }
     }
 protected:
     std::vector<FullContext> _MyData;
+    static inline std::wstring _MyVowel = L"aeiouAEIOUNcl";
 private:
     OpenJTalk(const OpenJTalk&) = delete;
     OpenJTalk(OpenJTalk&& right) noexcept = delete;
@@ -448,33 +557,27 @@ public:
             std::wsregex_token_iterator Iter(InputSeq.begin(), InputSeq.end(), SignRegexSingle, 0);
             std::wsregex_token_iterator End;
             for (; Iter != End; ++Iter)
-            {
-                OutRes.emplace_back();
-                wcscpy_s(OutRes.back().Phoneme, Iter->str().c_str());
-                OutRes.back().Tone = 0;
-            }
+                OutRes.emplace_back(Iter->str().c_str(), 0);
             return;
         }
         while (!InputSeq.empty())
         {
-            for (size_t SearchLength = min(MaxSize, InputSeq.length()); SearchLength > 0; --SearchLength)
+            for (size_t SearchLength = std::min(MaxSize, InputSeq.length()); SearchLength > 0; --SearchLength)
             {
                 const auto SearchResult = _Dict.find(InputSeq.substr(0, SearchLength));
                 if (SearchResult != _Dict.end() && SearchResult->second.Phone.size() == SearchResult->second.Tone.size())
                 {
                     for (size_t i = 0; i < SearchResult->second.Phone.size(); ++i)
-                    {
-                        OutRes.emplace_back();
-                        wcscpy_s(OutRes.back().Phoneme, SearchResult->second.Phone[i].c_str());
-                        OutRes.back().Tone = static_cast<int64_t>((uint8_t)SearchResult->second.Tone[i]);
-                    }
+                        OutRes.emplace_back(
+                            SearchResult->second.Phone[i].c_str(),
+                            static_cast<int64_t>((uint8_t)SearchResult->second.Tone[i])
+                        );
                     InputSeq = InputSeq.substr(SearchLength);
                     break;
                 }
                 if (SearchLength == 1)
                 {
-                    OutRes.emplace_back();
-                    wcscpy_s(OutRes.back().Phoneme, L"[UNK]");
+                    OutRes.emplace_back(InputSeq.substr(0, 1).c_str(), 0);
                     InputSeq = InputSeq.substr(1);
                 }
             }
@@ -587,7 +690,7 @@ public:
     void* Convert(
         const std::wstring& InputText,
         const std::string& LanguageID,
-        const void*
+		const void* ExtraInfo
     )
     {
         OutRes.clear();
@@ -600,15 +703,13 @@ public:
         else if (LanguageID == "Japanese")
         {
             for (const auto& it : InputSeq)
-                _OpenJTalk->operator()(it, OutRes);
+                _OpenJTalk->operator()(it, OutRes, ExtraInfo);
         }
         else
             return nullptr;
         if (OutRes.empty())
             return nullptr;
-        OutRes.emplace_back();
-        wcscpy_s(OutRes.back().Phoneme, L"[EOS]");
-        OutRes.back().Tone = INT64_MAX;
+        OutRes.emplace_back(L"[EOS]", INT64_MAX);
         return OutRes.data();
     }
 
@@ -640,9 +741,9 @@ void DestoryInstance(void* _Instance)
 {
     delete static_cast<Instance*>(_Instance);
 }
-void* Convert(void* _Instance, const wchar_t* InputText, const char* LanguageID, const void*)
+void* Convert(void* _Instance, const wchar_t* InputText, const char* LanguageID, const void* UserParameter)
 {
-    return static_cast<Instance*>(_Instance)->Convert(InputText, LanguageID, nullptr);
+    return static_cast<Instance*>(_Instance)->Convert(InputText, LanguageID, UserParameter);
 }
 void* GetExtraInfo(void* _Instance)
 {
